@@ -1,0 +1,17 @@
+{
+  "name": "hk-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/write-env.mjs",
+    "dev": "vite --host 0.0.0.0",
+    "prebuild": "node scripts/write-env.mjs",
+    "build": "vite build",
+    "prepreview": "node scripts/write-env.mjs",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.16"
+  }
+}

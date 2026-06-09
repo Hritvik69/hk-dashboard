@@ -28,9 +28,13 @@ const fileEnv = parseDotEnv(envPath);
 const read = (key) => process.env[key] || fileEnv[key] || '';
 
 const config = {
-  SUPABASE_URL: read('VITE_SUPABASE_URL'),
-  SUPABASE_ANON_KEY: read('VITE_SUPABASE_ANON_KEY'),
-  STOCK_PICKS_URL: read('VITE_STOCK_PICKS_URL')
+  SUPABASE_URL: read('VITE_SUPABASE_URL') || read('NEXT_PUBLIC_SUPABASE_URL'),
+  SUPABASE_ANON_KEY:
+    read('VITE_SUPABASE_ANON_KEY') ||
+    read('VITE_SUPABASE_PUBLISHABLE_KEY') ||
+    read('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
+    read('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+  STOCK_PICKS_URL: read('VITE_STOCK_PICKS_URL') || read('NEXT_PUBLIC_STOCK_PICKS_URL')
 };
 
 fs.mkdirSync(publicDir, { recursive: true });

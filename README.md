@@ -24,6 +24,9 @@ Open `http://127.0.0.1:5173`.
 4. Add Supabase environment variables if you want login and cloud sync:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - Or use Supabase/Vercel style names:
+     - `NEXT_PUBLIC_SUPABASE_URL`
+     - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 Without Supabase, the dashboard still works, but saves only in the current browser.
 
@@ -36,6 +39,13 @@ After that, add these environment variables in Vercel and in your local `.env`:
 ```env
 VITE_SUPABASE_URL=your_project_url
 VITE_SUPABASE_ANON_KEY=your_anon_key
+```
+
+These names also work:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 ```
 
 The app uses Supabase Auth magic links. Once signed in, your dashboard data is saved per user.

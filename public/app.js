@@ -179,7 +179,11 @@
     const result = await client.auth.getSession();
     session = result.data.session;
     statusText = session ? 'Supabase cloud sync' : 'Cloud ready, sign in to sync';
-    if (session) await loadCloud();
+    if (session) {
+      await loadCloud();
+    } else {
+      await loadCloudPicks();
+    }
 
     client.auth.onAuthStateChange(async (_event, nextSession) => {
       session = nextSession;
@@ -211,6 +215,44 @@
     } else {
       await saveCloud();
     }
+
+    await loadCloudPicks();
+  }
+
+  async function loadCloudPicks() {
+    if (!client) return 0;
+
+    const result = await client
+      .from('tomorrow_picks')
+      .select('id,symbol,source,score,signal,scanner,mode,data,updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(40);
+
+    if (result.error) {
+      setNotice(`Stock picks load failed: ${result.error.message}`);
+      return 0;
+    }
+
+    const cloudPicks = (result.data || []).map((row) =>
+      normalizePick({
+        ...(row.data || {}),
+        id: row.id,
+        symbol: row.symbol,
+        source: row.source,
+        score: row.score,
+        signal: row.signal,
+        scanner: row.scanner,
+        mode: row.mode,
+        updated_at: row.updated_at
+      })
+    );
+
+    state = mergeDashboard({
+      ...state,
+      picks: mergePicks(state.picks, cloudPicks)
+    });
+    writeLocal(state);
+    return cloudPicks.length;
   }
 
   async function saveCloud() {
@@ -290,6 +332,8 @@
   }
 
   function normalizePick(item) {
+    const data = item && item.data && typeof item.data === 'object' ? item.data : {};
+    item = { ...data, ...(item || {}) };
     return {
       id: item.id || uid('pick'),
       symbol: String(pickValue(item, ['symbol', 'ticker', 'name'], 'UNKNOWN')).toUpperCase(),
@@ -301,10 +345,24 @@
       entry: String(pickValue(item, ['entry', 'entry_price'], '')),
       target: String(pickValue(item, ['target', 'target_price'], '')),
       stop: String(pickValue(item, ['stop', 'stop_loss', 'sl'], '')),
-      confidence: Number(pickValue(item, ['confidence', 'score'], 0)) || 0,
+      confidence: Number(pickValue(item, ['confidence', 'score', 'tomorrow_score'], 0)) || 0,
       notes: String(pickValue(item, ['notes', 'reason', 'summary'], '')),
+      origin: item.origin || item.scanner || '',
       createdAt: item.createdAt || new Date().toISOString()
     };
+  }
+
+  function mergePicks(existing, incoming) {
+    const keyed = new Map();
+    [...(existing || []), ...(incoming || [])].forEach((pick) => {
+      const normalized = normalizePick(pick);
+      const key = `${normalized.source}:${normalized.symbol}`;
+      keyed.set(key, { ...keyed.get(key), ...normalized });
+    });
+    return Array.from(keyed.values()).sort((a, b) => {
+      if (a.source !== b.source) return a.source === 'AI' ? -1 : 1;
+      return (b.confidence || 0) - (a.confidence || 0);
+    });
   }
 
   function renderQuickLinks() {
@@ -737,8 +795,17 @@
   }
 
   async function syncPicks() {
+    if (client) {
+      const count = await loadCloudPicks();
+      if (count) {
+        setNotice(`Loaded ${count} picks from Supabase.`);
+        render();
+        return;
+      }
+    }
+
     if (!config.STOCK_PICKS_URL) {
-      setNotice('Add VITE_STOCK_PICKS_URL to sync from the scanner.');
+      setNotice('No Supabase picks yet. Run the scanner after adding Streamlit Supabase secrets.');
       return;
     }
 

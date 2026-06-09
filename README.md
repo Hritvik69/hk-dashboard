@@ -50,6 +50,28 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 
 The app uses Supabase Auth magic links. Once signed in, your dashboard data is saved per user.
 
+## Connect Odysseus
+
+Your live dashboard cannot directly read `127.0.0.1:7000`, because that only exists on your laptop. Use the local sync command instead.
+
+Create `.env.local` on your laptop:
+
+```env
+ODYSSEUS_URL=http://127.0.0.1:7000
+ODYSSEUS_API_TOKEN=your_odysseus_codex_token
+NEXT_PUBLIC_SUPABASE_URL=your_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_USER_EMAIL=the_email_you_use_to_login_to_dashboard
+```
+
+Then run:
+
+```powershell
+npm run sync:odysseus
+```
+
+This reads Odysseus through `/api/codex/dashboard/export` and writes the data into your Supabase `dashboard_state` row. Keep the service role key private; do not add it to Vercel frontend environment variables.
+
 ## Tailscale Access
 
 Run locally:
@@ -70,7 +92,18 @@ This keeps it private to your Tailscale account. For personal use, this is the s
 
 ## Tomorrow's Picks
 
-If your NSE scanner exposes a JSON endpoint, set:
+Tomorrow's Picks can arrive two ways.
+
+Preferred: add these secrets to your Streamlit app so the scanner publishes picks into Supabase after every scan:
+
+```toml
+SUPABASE_URL = "your_project_url"
+SUPABASE_SERVICE_ROLE_KEY = "your_service_role_key"
+```
+
+The live dashboard reads those picks from the `tomorrow_picks` table automatically.
+
+Fallback: if your NSE scanner exposes a JSON endpoint, set:
 
 ```env
 VITE_STOCK_PICKS_URL=https://your-scanner-url/picks.json

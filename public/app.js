@@ -1,13 +1,18 @@
 (function () {
   const STORAGE_KEY = 'hk-dashboard-state-v1';
   const FILE_BUCKET = 'dashboard-files';
+  const SYNC_INTERVAL_MS = 20000;
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
 
   let client = null;
   let session = null;
   let saveTimer = null;
+  let syncTimer = null;
+  let realtimeChannel = null;
+  let hasLoadedCloud = false;
   let statusText = 'Local browser saving';
+  let syncText = 'Not synced yet';
   let notice = '';
   let state = mergeDashboard(readLocal());
   const ui = {
@@ -34,34 +39,10 @@
   function defaultDashboard() {
     const now = new Date().toISOString();
     return {
-      notes: [
-        {
-          id: 'note-welcome',
-          title: 'Dashboard ready',
-          body: 'Use this as your personal workspace. Add notes, tasks, stock picks, reminders, photos, and 30-day habits.',
-          pinned: true,
-          createdAt: now
-        }
-      ],
-      tasks: [
-        {
-          id: 'task-first',
-          text: 'Set up Supabase when you want cloud sync',
-          done: false,
-          dueDate: '',
-          priority: 'High',
-          createdAt: now
-        }
-      ],
+      notes: [],
+      tasks: [],
       events: [],
-      habits: [
-        {
-          id: 'habit-admin',
-          name: 'Gym workout',
-          color: '#ff5c7a',
-          checks: {}
-        }
-      ],
+      habits: [],
       picks: [],
       photos: [],
       updatedAt: now
@@ -71,7 +52,7 @@
   function mergeDashboard(input) {
     const defaults = defaultDashboard();
     const data = input && typeof input === 'object' ? input : {};
-    return {
+    return cleanSeedData({
       ...defaults,
       ...data,
       notes: Array.isArray(data.notes) ? data.notes : defaults.notes,
@@ -81,7 +62,25 @@
       picks: Array.isArray(data.picks) ? data.picks : defaults.picks,
       photos: Array.isArray(data.photos) ? data.photos : Array.isArray(data.files) ? data.files : defaults.photos,
       updatedAt: data.updatedAt || defaults.updatedAt
+    });
+  }
+
+  function cleanSeedData(data) {
+    return {
+      ...data,
+      notes: (data.notes || []).filter((note) => note.id !== 'note-welcome'),
+      tasks: (data.tasks || []).filter((task) => task.id !== 'task-first'),
+      habits: (data.habits || []).filter((habit) => habit.id !== 'habit-admin')
     };
+  }
+
+  function hasSeedData(data) {
+    if (!data || typeof data !== 'object') return false;
+    return (
+      (Array.isArray(data.notes) && data.notes.some((note) => note.id === 'note-welcome')) ||
+      (Array.isArray(data.tasks) && data.tasks.some((task) => task.id === 'task-first')) ||
+      (Array.isArray(data.habits) && data.habits.some((habit) => habit.id === 'habit-admin'))
+    );
   }
 
   function uid(prefix) {
@@ -229,6 +228,10 @@
     render();
   }
 
+  function markSynced(label = 'Synced') {
+    syncText = `${label} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
   function mutate(recipe) {
     state = mergeDashboard(recipe(mergeDashboard(state)));
     state.updatedAt = new Date().toISOString();
@@ -267,27 +270,93 @@
     session = result.data.session;
     statusText = session ? 'Supabase cloud sync' : 'Cloud ready, sign in to sync';
     if (session) {
-      await loadCloud();
+      await syncCloudNow({ force: true, silent: true });
     } else {
-      await loadCloudPicks();
+      await syncCloudNow({ silent: true });
     }
+    startCloudSync();
 
     client.auth.onAuthStateChange(async (_event, nextSession) => {
       session = nextSession;
       statusText = session ? 'Supabase cloud sync' : 'Cloud ready, sign in to sync';
-      if (session) await loadCloud();
+      hasLoadedCloud = false;
+      await syncCloudNow({ force: true, silent: true });
+      startCloudSync();
       render();
     });
 
     render();
   }
 
-  async function loadCloud() {
+  function startCloudSync() {
+    stopCloudSync();
+    if (!client) return;
+
+    syncTimer = setInterval(() => {
+      syncCloudNow({ silent: true }).catch(() => {});
+    }, SYNC_INTERVAL_MS);
+
+    try {
+      realtimeChannel = client.channel(`hk-dashboard-sync-${session?.user?.id || 'public'}`);
+      if (session) {
+        realtimeChannel.on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'dashboard_state',
+            filter: `user_id=eq.${session.user.id}`
+          },
+          () => syncCloudNow({ force: true, silent: true }).catch(() => {})
+        );
+      }
+      realtimeChannel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tomorrow_picks' },
+        () => syncCloudNow({ force: true, silent: true }).catch(() => {})
+      );
+      realtimeChannel.subscribe();
+    } catch {
+      realtimeChannel = null;
+    }
+  }
+
+  function stopCloudSync() {
+    if (syncTimer) {
+      clearInterval(syncTimer);
+      syncTimer = null;
+    }
+    if (realtimeChannel && client) {
+      Promise.resolve(client.removeChannel(realtimeChannel)).catch(() => {});
+      realtimeChannel = null;
+    }
+  }
+
+  async function syncCloudNow(options = {}) {
+    const { force = false, silent = false } = options;
+    if (!client) return;
+
+    if (session) {
+      await loadCloud({ force, silent: true });
+    } else {
+      await loadCloudPicks({ silent: true });
+    }
+
+    markSynced(session ? 'Cloud synced' : 'Picks synced');
+    if (!silent) {
+      setNotice(session ? 'Latest cloud data synced.' : 'Latest stock picks synced.');
+    } else {
+      render();
+    }
+  }
+
+  async function loadCloud(options = {}) {
+    const { force = false, silent = false } = options;
     if (!client || !session) return;
 
     const result = await client
       .from('dashboard_state')
-      .select('data')
+      .select('data,updated_at')
       .eq('user_id', session.user.id)
       .maybeSingle();
 
@@ -297,16 +366,25 @@
     }
 
     if (result.data && result.data.data) {
-      state = mergeDashboard(result.data.data);
-      writeLocal(state);
+      const remoteHadSeed = hasSeedData(result.data.data);
+      const remoteState = mergeDashboard(result.data.data);
+      const remoteTime = Date.parse(result.data.updated_at || remoteState.updatedAt || '') || 0;
+      const localTime = Date.parse(state.updatedAt || '') || 0;
+      if (force || !hasLoadedCloud || remoteTime >= localTime) {
+        state = remoteState;
+        writeLocal(state);
+        if (remoteHadSeed) await saveCloud();
+      }
+      hasLoadedCloud = true;
     } else {
       await saveCloud();
     }
 
-    await loadCloudPicks();
+    await loadCloudPicks({ silent });
   }
 
-  async function loadCloudPicks() {
+  async function loadCloudPicks(options = {}) {
+    const { silent = false } = options;
     if (!client) return 0;
 
     const result = await client
@@ -316,7 +394,7 @@
       .limit(40);
 
     if (result.error) {
-      setNotice(`Stock picks load failed: ${result.error.message}`);
+      if (!silent) setNotice(`Stock picks load failed: ${result.error.message}`);
       return 0;
     }
 
@@ -336,7 +414,10 @@
 
     state = mergeDashboard({
       ...state,
-      picks: mergePicks(state.picks, cloudPicks)
+      picks: mergePicks(
+        state.picks.filter((pick) => pick.origin !== 'NSE Sentinel'),
+        cloudPicks
+      )
     });
     writeLocal(state);
     return cloudPicks.length;
@@ -354,6 +435,8 @@
     if (result.error) {
       statusText = `Cloud save failed: ${result.error.message}`;
       render();
+    } else {
+      markSynced('Saved');
     }
   }
 
@@ -377,7 +460,10 @@
     if (!client) return;
     await client.auth.signOut();
     session = null;
+    hasLoadedCloud = false;
     statusText = 'Signed out, local saving active';
+    syncText = 'Not synced yet';
+    startCloudSync();
     render();
   }
 
@@ -631,7 +717,7 @@
         <span class="icon large">GY</span>
       </header>
       <div class="habit-form">
-        <input id="habit-name" placeholder="Add habit, e.g. Gym workout" />
+        <input id="habit-name" placeholder="Add habit name" />
         <button type="button" id="add-habit">Add</button>
       </div>
       <div class="habit-table">${dayHeader}${rows}</div>
@@ -732,9 +818,14 @@
     const cloudReady = Boolean(client);
     const authHtml = cloudReady
       ? session
-        ? `<div class="account-box"><p>Signed in as ${escapeHtml(session.user.email)}</p><button type="button" id="sign-out">Sign out</button></div>`
+        ? `<div class="account-box">
+            <div><p>Signed in as ${escapeHtml(session.user.email)}</p><small>${escapeHtml(syncText)}</small></div>
+            <div class="button-row"><button type="button" id="sync-now">Sync now</button><button type="button" id="sign-out">Sign out</button></div>
+          </div>`
         : `<form class="account-form" id="sign-in-form"><input id="email" type="email" placeholder="Email for cloud sync" required /><button type="submit">Send link</button></form>`
       : '<p class="muted-copy">Local saving is active. Add Supabase env vars on Vercel for cloud login and cross-device sync.</p>';
+    const syncMode = session ? 'Dashboard auto-syncs every 20 seconds' : 'Sign in once to sync notes, tasks, files, and habits';
+    const fileMode = session ? 'Files upload to private Supabase Storage' : 'Files stay in this browser until sign in';
 
     return `<article class="panel account-panel">
       <header class="panel-header">
@@ -747,9 +838,9 @@
         <label class="file-button">Import JSON<input id="import-json" type="file" accept="application/json" /></label>
       </div>
       <div class="connection-list">
-        <span><span class="icon">FL</span> Files save with your dashboard</span>
-        <span><span class="icon">TS</span> Tailscale-ready local preview</span>
-        <span><span class="icon">VC</span> Vercel-ready static build</span>
+        <span><span class="icon">DB</span> ${escapeHtml(syncMode)}</span>
+        <span><span class="icon">ST</span> Stock picks auto-refresh from Supabase</span>
+        <span><span class="icon">FL</span> ${escapeHtml(fileMode)}</span>
       </div>
     </article>`;
   }
@@ -871,6 +962,11 @@
     });
     byId('export-json')?.addEventListener('click', exportJson);
     byId('import-json')?.addEventListener('change', importJson);
+    byId('sync-now')?.addEventListener('click', () => {
+      syncCloudNow({ force: true, silent: false }).catch((error) => {
+        setNotice(error.message || 'Sync failed.');
+      });
+    });
 
     byId('sign-in-form')?.addEventListener('submit', (event) => {
       event.preventDefault();

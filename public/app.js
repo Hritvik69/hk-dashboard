@@ -1,5 +1,6 @@
 (function () {
   const STORAGE_KEY = 'hk-dashboard-state-v1';
+  const FILE_BUCKET = 'dashboard-files';
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
 
@@ -12,7 +13,13 @@
   const ui = {
     monthCursor: new Date(),
     selectedDate: todayKey(),
-    pickFilter: 'All'
+    pickFilter: 'All',
+    activeFileId: '',
+    activeFileUrl: '',
+    activeFileText: '',
+    activeFileObjectUrl: '',
+    activeFileLoading: false,
+    activeFileError: ''
   };
 
   const quickLinks = [
@@ -72,7 +79,7 @@
       events: Array.isArray(data.events) ? data.events : defaults.events,
       habits: Array.isArray(data.habits) ? data.habits : defaults.habits,
       picks: Array.isArray(data.picks) ? data.picks : defaults.picks,
-      photos: Array.isArray(data.photos) ? data.photos : defaults.photos,
+      photos: Array.isArray(data.photos) ? data.photos : Array.isArray(data.files) ? data.files : defaults.photos,
       updatedAt: data.updatedAt || defaults.updatedAt
     };
   }
@@ -118,6 +125,86 @@
         "'": '&#39;'
       }[char];
     });
+  }
+
+  function formatBytes(size) {
+    const bytes = Number(size) || 0;
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+  }
+
+  function fileUrl(file) {
+    return file?.url || file?.dataUrl || '';
+  }
+
+  function fileType(file) {
+    if (file?.type) return file.type;
+    const match = String(fileUrl(file)).match(/^data:([^;,]+)/);
+    return match ? match[1] : '';
+  }
+
+  function isTextFile(file) {
+    const type = fileType(file);
+    return type.startsWith('text/') || ['application/json', 'application/xml', 'application/javascript'].includes(type);
+  }
+
+  function fileKind(file) {
+    const type = fileType(file);
+    if (type.startsWith('image/')) return 'Image';
+    if (type === 'application/pdf') return 'PDF';
+    if (isTextFile(file)) return 'Text';
+    if (type.includes('word')) return 'Doc';
+    if (type.includes('spreadsheet') || type.includes('excel')) return 'Sheet';
+    if (type.includes('zip') || type.includes('archive')) return 'Archive';
+    return 'File';
+  }
+
+  function fileBadge(file) {
+    const name = String(file?.name || '');
+    const extension = name.includes('.') ? name.split('.').pop().slice(0, 4).toUpperCase() : '';
+    return extension || fileKind(file).slice(0, 4).toUpperCase();
+  }
+
+  function safeFileName(name) {
+    return String(name || 'file')
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, '-')
+      .slice(0, 96);
+  }
+
+  function readFileDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('File read failed.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function dataUrlToText(url) {
+    const match = String(url || '').match(/^data:([^,]*),(.*)$/);
+    if (!match) return '';
+    try {
+      const meta = match[1];
+      const payload = match[2];
+      if (meta.includes(';base64')) {
+        const binary = atob(payload);
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      }
+      return decodeURIComponent(payload);
+    } catch {
+      return '';
+    }
+  }
+
+  function revokeActiveFileUrl() {
+    if (ui.activeFileObjectUrl) {
+      URL.revokeObjectURL(ui.activeFileObjectUrl);
+      ui.activeFileObjectUrl = '';
+    }
   }
 
   function readLocal() {
@@ -552,22 +639,93 @@
   }
 
   function renderGallery() {
-    const photosHtml = state.photos.length
-      ? state.photos
+    const files = state.photos || [];
+    const totalSize = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+    const filesHtml = files.length
+      ? files
           .slice(0, 8)
-          .map((photo) => {
-            return `<figure><img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.name)}" /><figcaption>${escapeHtml(photo.name)}</figcaption></figure>`;
-          })
+          .map(renderFileCard)
           .join('')
-      : '<p class="empty">No photos yet</p>';
+      : '<p class="empty">No files yet</p>';
 
     return `<article class="panel gallery-panel">
       <header class="panel-header">
-        <div><p class="eyebrow">Gallery</p><h2>${state.photos.length} photos</h2></div>
-        <label class="file-button">Upload<input id="photo-input" type="file" accept="image/*" /></label>
+        <div><p class="eyebrow">Gallery &amp; Files</p><h2>${files.length} files</h2><p>${formatBytes(totalSize)}</p></div>
+        <label class="file-button">Upload<input id="file-input" type="file" multiple /></label>
       </header>
-      <div class="photo-grid">${photosHtml}</div>
+      <div class="photo-grid">${filesHtml}</div>
     </article>`;
+  }
+
+  function renderFileCard(file) {
+    const id = escapeHtml(file.id);
+    const name = escapeHtml(file.name || 'Untitled file');
+    const kind = fileKind(file);
+    const imageSource = file.thumbUrl || (fileType(file).startsWith('image/') ? fileUrl(file) : '');
+    const previewHtml = imageSource
+      ? `<img src="${escapeHtml(imageSource)}" alt="${name}" /><span class="file-icon fallback">${escapeHtml(fileBadge(file))}</span>`
+      : `<span class="file-icon">${escapeHtml(fileBadge(file))}</span>`;
+
+    return `<figure class="file-card">
+      <button type="button" class="file-preview" data-file-open="${id}" aria-label="Open ${name}">
+        ${previewHtml}
+      </button>
+      <figcaption>
+        <button type="button" class="file-name" data-file-open="${id}">${name}</button>
+        <span>${escapeHtml(kind)} &middot; ${formatBytes(file.size)}</span>
+        <div class="file-actions">
+          <button type="button" data-file-download="${id}">Download</button>
+          <button type="button" data-file-delete="${id}">Remove</button>
+        </div>
+      </figcaption>
+    </figure>`;
+  }
+
+  function renderFileModal() {
+    const file = (state.photos || []).find((item) => item.id === ui.activeFileId);
+    if (!file) return '';
+
+    const name = escapeHtml(file.name || 'Untitled file');
+    const preview = renderFilePreview(file);
+
+    return `<div class="file-modal" role="dialog" aria-modal="true" aria-label="${name}">
+      <section class="file-modal-card">
+        <header class="file-modal-header">
+          <div>
+            <p class="eyebrow">${escapeHtml(fileKind(file))} &middot; ${formatBytes(file.size)}</p>
+            <h2>${name}</h2>
+          </div>
+          <div class="button-row">
+            <button type="button" data-file-download="${escapeHtml(file.id)}">Download</button>
+            <button type="button" id="file-modal-close">Close</button>
+          </div>
+        </header>
+        <div class="file-modal-body">${preview}</div>
+      </section>
+    </div>`;
+  }
+
+  function renderFilePreview(file) {
+    if (ui.activeFileLoading) return '<p class="empty">Opening file...</p>';
+    if (ui.activeFileError) return `<p class="empty">${escapeHtml(ui.activeFileError)}</p>`;
+
+    const source = ui.activeFileUrl || fileUrl(file);
+    const type = fileType(file);
+    if (type.startsWith('image/') && source) {
+      return `<img class="file-view-image" src="${escapeHtml(source)}" alt="${escapeHtml(file.name)}" />`;
+    }
+    if (type === 'application/pdf' && source) {
+      return `<iframe class="file-view-frame" src="${escapeHtml(source)}" title="${escapeHtml(file.name)}"></iframe>`;
+    }
+    if (isTextFile(file)) {
+      const text = ui.activeFileText || dataUrlToText(source);
+      return `<pre class="file-view-text">${escapeHtml(text || 'No preview text available.')}</pre>`;
+    }
+    return `<div class="file-view-generic">
+      <span class="file-icon large">${escapeHtml(fileBadge(file))}</span>
+      <p>${escapeHtml(file.name || 'File')}</p>
+      <small>${formatBytes(file.size)} &middot; download to open this format</small>
+    </div>`;
   }
 
   function renderAccount() {
@@ -589,7 +747,7 @@
         <label class="file-button">Import JSON<input id="import-json" type="file" accept="application/json" /></label>
       </div>
       <div class="connection-list">
-        <span><span class="icon">PH</span> Photos save in dashboard data</span>
+        <span><span class="icon">FL</span> Files save with your dashboard</span>
         <span><span class="icon">TS</span> Tailscale-ready local preview</span>
         <span><span class="icon">VC</span> Vercel-ready static build</span>
       </div>
@@ -631,7 +789,8 @@
         ${renderGallery()}
         ${renderAccount()}
       </section>
-    </main>`;
+    </main>
+    ${renderFileModal()}`;
 
     bindEvents();
   }
@@ -687,7 +846,29 @@
       button.addEventListener('click', () => toggleHabit(button.dataset.habit, button.dataset.habitDay));
     });
 
-    byId('photo-input')?.addEventListener('change', addPhoto);
+    document.querySelectorAll('[data-file-open]').forEach((button) => {
+      button.addEventListener('click', () => openFile(button.dataset.fileOpen));
+    });
+
+    document.querySelectorAll('[data-file-download]').forEach((button) => {
+      button.addEventListener('click', () => downloadFile(button.dataset.fileDownload));
+    });
+
+    document.querySelectorAll('[data-file-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteFile(button.dataset.fileDelete));
+    });
+
+    document.querySelectorAll('.file-preview img').forEach((image) => {
+      image.addEventListener('error', () => {
+        image.closest('.file-preview')?.classList.add('preview-failed');
+      });
+    });
+
+    byId('file-input')?.addEventListener('change', addFiles);
+    byId('file-modal-close')?.addEventListener('click', closeFile);
+    document.querySelector('.file-modal')?.addEventListener('click', (event) => {
+      if (event.target.classList.contains('file-modal')) closeFile();
+    });
     byId('export-json')?.addEventListener('click', exportJson);
     byId('import-json')?.addEventListener('change', importJson);
 
@@ -860,27 +1041,199 @@
     }));
   }
 
-  function addPhoto(event) {
-    const file = event.target.files && event.target.files[0];
+  async function addFiles(event) {
+    const selected = Array.from((event.target.files || [])).filter(Boolean);
+    event.target.value = '';
+    if (!selected.length) return;
+
+    setNotice(`Uploading ${selected.length} file${selected.length === 1 ? '' : 's'}...`);
+    const uploaded = [];
+    let usedLocalFallback = false;
+
+    for (const file of selected) {
+      try {
+        if (client && session) {
+          uploaded.push(await uploadStoredFile(file));
+        } else {
+          uploaded.push(await createLocalFileRecord(file));
+          usedLocalFallback = true;
+        }
+      } catch {
+        uploaded.push(await createLocalFileRecord(file));
+        usedLocalFallback = true;
+      }
+    }
+
+    mutate((current) => ({
+      ...current,
+      photos: [...uploaded, ...current.photos]
+    }));
+
+    setNotice(
+      usedLocalFallback
+        ? 'Files saved in dashboard data. Sign in and run the Supabase storage SQL for full cloud file storage.'
+        : `${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded.`
+    );
+  }
+
+  async function createLocalFileRecord(file) {
+    const dataUrl = await readFileDataUrl(file);
+    return {
+      id: uid('file'),
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      url: dataUrl,
+      size: file.size,
+      createdAt: new Date().toISOString(),
+      origin: 'dashboard-data'
+    };
+  }
+
+  async function uploadStoredFile(file) {
+    const id = uid('file');
+    const type = file.type || 'application/octet-stream';
+    const path = `${session.user.id}/${id}-${safeFileName(file.name)}`;
+    const thumbUrl = type.startsWith('image/') ? await createImageThumb(file).catch(() => '') : '';
+
+    const result = await client.storage.from(FILE_BUCKET).upload(path, file, {
+      cacheControl: '3600',
+      contentType: type,
+      upsert: false
+    });
+
+    if (result.error) throw result.error;
+
+    return {
+      id,
+      name: file.name,
+      type,
+      size: file.size,
+      storageBucket: FILE_BUCKET,
+      storagePath: path,
+      thumbUrl,
+      createdAt: new Date().toISOString(),
+      origin: 'supabase-storage'
+    };
+  }
+
+  function createImageThumb(file) {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const max = 420;
+        const scale = Math.min(1, max / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('Thumbnail failed.'));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Thumbnail failed.'));
+      };
+      image.src = objectUrl;
+    });
+  }
+
+  async function openFile(id) {
+    const file = (state.photos || []).find((item) => item.id === id);
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      mutate((current) => ({
-        ...current,
-        photos: [
-          {
-            id: uid('photo'),
-            name: file.name,
-            url: reader.result,
-            size: file.size,
-            createdAt: new Date().toISOString()
-          },
-          ...current.photos
-        ]
-      }));
-    };
-    reader.readAsDataURL(file);
+    revokeActiveFileUrl();
+    ui.activeFileId = id;
+    ui.activeFileUrl = fileUrl(file);
+    ui.activeFileText = isTextFile(file) ? dataUrlToText(ui.activeFileUrl) : '';
+    ui.activeFileLoading = Boolean(file.storagePath && !ui.activeFileUrl);
+    ui.activeFileError = '';
+    render();
+
+    if (!file.storagePath || ui.activeFileUrl) return;
+
+    try {
+      const blob = await fetchStoredFile(file);
+      const objectUrl = URL.createObjectURL(blob);
+      ui.activeFileObjectUrl = objectUrl;
+      ui.activeFileUrl = objectUrl;
+      ui.activeFileText = isTextFile(file) ? await blob.text() : '';
+      ui.activeFileLoading = false;
+      render();
+    } catch (error) {
+      ui.activeFileLoading = false;
+      ui.activeFileError = error.message || 'Could not open this file.';
+      render();
+    }
+  }
+
+  function closeFile() {
+    revokeActiveFileUrl();
+    ui.activeFileId = '';
+    ui.activeFileUrl = '';
+    ui.activeFileText = '';
+    ui.activeFileLoading = false;
+    ui.activeFileError = '';
+    render();
+  }
+
+  async function fetchStoredFile(file) {
+    if (!client || !session) throw new Error('Sign in to open cloud files.');
+    const result = await client.storage
+      .from(file.storageBucket || FILE_BUCKET)
+      .download(file.storagePath);
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function downloadFile(id) {
+    const file = (state.photos || []).find((item) => item.id === id);
+    if (!file) return;
+
+    try {
+      const source = fileUrl(file);
+      if (source) {
+        triggerDownload(source, file.name);
+        return;
+      }
+
+      const blob = await fetchStoredFile(file);
+      const objectUrl = URL.createObjectURL(blob);
+      triggerDownload(objectUrl, file.name);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      setNotice(error.message || 'Download failed.');
+    }
+  }
+
+  function triggerDownload(url, name) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name || 'download';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function deleteFile(id) {
+    const file = (state.photos || []).find((item) => item.id === id);
+    if (!file) return;
+
+    if (file.storagePath && client && session) {
+      await client.storage.from(file.storageBucket || FILE_BUCKET).remove([file.storagePath]);
+    }
+
+    if (ui.activeFileId === id) closeFile();
+
+    mutate((current) => ({
+      ...current,
+      photos: current.photos.filter((item) => item.id !== id)
+    }));
   }
 
   function exportJson() {

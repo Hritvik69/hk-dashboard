@@ -492,6 +492,9 @@ h3 {
 }
 
 .pick-card {
+  display: grid;
+  align-content: start;
+  gap: 9px;
   padding: 14px;
 }
 
@@ -499,11 +502,14 @@ h3 {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
 }
 
 .pick-card strong {
   color: #ffffff;
   font-size: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pick-card span {
@@ -516,12 +522,13 @@ h3 {
 .pick-card p {
   color: var(--amber);
   font-weight: 800;
+  margin: 0;
 }
 
 .pick-card dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 12px;
+  gap: 7px 12px;
   margin: 0;
 }
 
@@ -532,6 +539,31 @@ h3 {
 .pick-card dd {
   margin: 0;
   text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pick-notes,
+.pick-warning {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pick-warning {
+  color: var(--amber);
+}
+
+.pick-link {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  text-transform: uppercase;
 }
 
 .habit-form {

@@ -504,9 +504,37 @@
     return fallback;
   }
 
+  function pickRange(item, lowKeys, highKeys) {
+    const low = pickValue(item, lowKeys);
+    const high = pickValue(item, highKeys);
+    if (low && high) return `${low} - ${high}`;
+    return low || high || '';
+  }
+
+  function formatPickScore(value) {
+    const score = Number(value) || 0;
+    return score ? `${score.toFixed(score % 1 ? 1 : 0)}/100` : '';
+  }
+
+  function renderPickRows(rows) {
+    return rows
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+      .map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`)
+      .join('');
+  }
+
   function normalizePick(item) {
     const data = item && item.data && typeof item.data === 'object' ? item.data : {};
-    item = { ...data, ...(item || {}) };
+    const snapshot =
+      (data.snapshot && typeof data.snapshot === 'object' ? data.snapshot : null) ||
+      (item && item.snapshot && typeof item.snapshot === 'object' ? item.snapshot : null) ||
+      {};
+    item = { ...snapshot, ...data, ...(item || {}) };
+    const entry = pickValue(item, ['entry', 'entry_price', 'Entry']) ||
+      pickRange(item, ['entry_low', 'Entry Low'], ['entry_high', 'Entry High']);
+    const target = pickValue(item, ['target', 'target_price', 'Target 1', 'Target']);
+    const stop = pickValue(item, ['stop', 'stop_loss', 'sl', 'ATR SL', 'Stop Loss', 'Stop', 'SL']);
+    const confidence = Number(pickValue(item, ['confidence', 'score', 'tomorrow_score', 'Prediction Score'], 0)) || 0;
     return {
       id: item.id || uid('pick'),
       symbol: String(pickValue(item, ['symbol', 'ticker', 'name'], 'UNKNOWN')).toUpperCase(),
@@ -515,11 +543,20 @@
         ? 'AI'
         : 'Manual',
       bias: String(pickValue(item, ['bias', 'side', 'signal'], 'Watch')),
-      entry: String(pickValue(item, ['entry', 'entry_price'], '')),
-      target: String(pickValue(item, ['target', 'target_price'], '')),
-      stop: String(pickValue(item, ['stop', 'stop_loss', 'sl'], '')),
-      confidence: Number(pickValue(item, ['confidence', 'score', 'tomorrow_score'], 0)) || 0,
-      notes: String(pickValue(item, ['notes', 'reason', 'summary'], '')),
+      price: String(pickValue(item, ['price', 'Price (\u20b9)', 'Price', 'Close', 'Last Price'], '')),
+      entry: String(entry || ''),
+      target: String(target || ''),
+      target2: String(pickValue(item, ['target_2', 'Target 2'], '')),
+      stop: String(stop || ''),
+      timing: String(pickValue(item, ['timing', 'Entry Timing Aura', 'Entry Timing', 'Timing Reason'], '')),
+      risk: String(pickValue(item, ['risk', 'Risk %', 'Risk Score', 'Trap Risk', 'Trap Risk Score'], '')),
+      setup: String(pickValue(item, ['setup', 'Setup Type', 'AIL Category', 'Mode Name', 'Mode Label', 'bucket_label'], '')),
+      volume: String(pickValue(item, ['volume', 'Volume', 'Vol / Avg', 'Volume Trend'], '')),
+      rsi: String(pickValue(item, ['rsi', 'RSI'], '')),
+      confidence,
+      notes: String(pickValue(item, ['notes', 'reason', 'summary', 'Positive Reasons', 'Battle Notes', 'Smart Notes'], '')),
+      warnings: String(pickValue(item, ['warnings', 'Warnings', 'Risk Notes', 'Gate Reasons'], '')),
+      chartUrl: String(pickValue(item, ['chart_url', 'TradingView', 'Chart'], '')),
       origin: item.origin || item.scanner || '',
       createdAt: item.createdAt || new Date().toISOString()
     };
@@ -661,14 +698,26 @@
       ? picks
           .slice(0, 10)
           .map((pick) => {
+            const rows = renderPickRows([
+              ['Price', pick.price],
+              ['Entry', pick.entry],
+              ['Target 1', pick.target],
+              ['Target 2', pick.target2],
+              ['Stop', pick.stop],
+              ['Score', formatPickScore(pick.confidence)],
+              ['Risk', pick.risk],
+              ['Timing', pick.timing],
+              ['Setup', pick.setup],
+              ['Volume', pick.volume],
+              ['RSI', pick.rsi]
+            ]);
             return `<div class="pick-card">
               <div><strong>${escapeHtml(pick.symbol)}</strong><span>${escapeHtml(pick.source)}</span></div>
               <p>${escapeHtml(pick.bias || 'Watch')}</p>
-              <dl>
-                <dt>Entry</dt><dd>${escapeHtml(pick.entry || '-')}</dd>
-                <dt>Target</dt><dd>${escapeHtml(pick.target || '-')}</dd>
-                <dt>Stop</dt><dd>${escapeHtml(pick.stop || '-')}</dd>
-              </dl>
+              <dl>${rows || '<dt>Status</dt><dd>Waiting for detail sync</dd>'}</dl>
+              ${pick.notes ? `<small class="pick-notes">${escapeHtml(pick.notes)}</small>` : ''}
+              ${pick.warnings ? `<small class="pick-warning">${escapeHtml(pick.warnings)}</small>` : ''}
+              ${pick.chartUrl ? `<a class="pick-link" href="${escapeHtml(pick.chartUrl)}" target="_blank" rel="noreferrer">Open chart</a>` : ''}
             </div>`;
           })
           .join('')

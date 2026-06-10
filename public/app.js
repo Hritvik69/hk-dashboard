@@ -403,7 +403,7 @@
       return 0;
     }
 
-    const cloudPicks = (result.data || []).map((row) =>
+    const cloudPicks = latestSyncedPickRows(result.data || []).map((row) =>
       normalizePick({
         ...(row.data || {}),
         id: row.id,
@@ -516,6 +516,29 @@
     return cleanSymbol && cleanSymbol !== 'UNKNOWN'
       ? `https://www.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(cleanSymbol)}`
       : '';
+  }
+
+  function isSyncedStockRow(row) {
+    const scanner = String(row?.scanner || '').toLowerCase();
+    const id = String(row?.id || '').toLowerCase();
+    return scanner.includes('nse sentinel') || id.startsWith('nse-') || id.startsWith('odysseus-');
+  }
+
+  function latestSyncedPickRows(rows) {
+    const synced = rows.filter(isSyncedStockRow);
+    const other = rows.filter((row) => !isSyncedStockRow(row));
+    if (!synced.length) return rows;
+
+    const latestTime = Math.max(
+      ...synced.map((row) => Date.parse(row.updated_at || '') || 0)
+    );
+    if (!latestTime) return rows;
+
+    const latestBatch = synced.filter((row) => {
+      const rowTime = Date.parse(row.updated_at || '') || 0;
+      return latestTime - rowTime <= 5000;
+    });
+    return [...latestBatch, ...other];
   }
 
   function isSyncedStockPick(pick) {

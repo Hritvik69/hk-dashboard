@@ -496,6 +496,7 @@
 
   function eventCounts() {
     return state.events.reduce((map, event) => {
+      if (event.done) return map;
       map[event.date] = (map[event.date] || 0) + 1;
       return map;
     }, {});
@@ -613,15 +614,16 @@
       .join('');
 
     const selectedEvents = state.events
-      .filter((event) => event.date === ui.selectedDate)
+      .filter((event) => event.date === ui.selectedDate && !event.done)
       .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
 
     const eventsHtml = selectedEvents.length
       ? selectedEvents
           .map((event) => {
-            return `<div class="list-item">
+            return `<div class="list-item event-item">
               <span class="icon">CA</span>
               <div><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.time || 'All day')}</span></div>
+              <button type="button" class="finish-button" data-event-finish="${escapeHtml(event.id)}">Finish</button>
             </div>`;
           })
           .join('')
@@ -963,6 +965,10 @@
       });
     });
 
+    document.querySelectorAll('[data-event-finish]').forEach((button) => {
+      button.addEventListener('click', () => finishEvent(button.dataset.eventFinish));
+    });
+
     byId('add-event')?.addEventListener('click', addEvent);
     byId('add-task')?.addEventListener('click', addTask);
     byId('add-note')?.addEventListener('click', addNote);
@@ -1088,6 +1094,22 @@
     }));
   }
 
+  function finishEvent(id) {
+    if (!id) return;
+    mutate((current) => ({
+      ...current,
+      events: current.events.map((event) =>
+        event.id === id
+          ? {
+              ...event,
+              done: true,
+              completedAt: new Date().toISOString()
+            }
+          : event
+      )
+    }));
+  }
+
   function addEvent() {
     const title = document.getElementById('event-title')?.value.trim();
     const date = document.getElementById('event-date')?.value || todayKey(1);
@@ -1103,6 +1125,7 @@
           title,
           date,
           time,
+          done: false,
           createdAt: new Date().toISOString()
         }
       ]

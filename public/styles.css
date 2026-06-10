@@ -581,12 +581,29 @@ h3 {
   color: var(--amber);
 }
 
+.pick-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .pick-link {
+  display: inline-grid;
+  min-height: 34px;
+  padding: 0 12px;
+  place-items: center;
   color: var(--cyan);
+  border: 1px solid rgba(73, 215, 233, 0.28);
+  border-radius: 7px;
+  background: rgba(73, 215, 233, 0.08);
   font-size: 12px;
   font-weight: 800;
   text-decoration: none;
   text-transform: uppercase;
+}
+
+.pick-link:hover {
+  border-color: rgba(73, 215, 233, 0.62);
+  background: rgba(73, 215, 233, 0.14);
 }
 
 .habit-form {

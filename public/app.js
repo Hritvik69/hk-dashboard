@@ -420,7 +420,7 @@
     state = mergeDashboard({
       ...state,
       picks: mergePicks(
-        state.picks.filter((pick) => pick.origin !== 'NSE Sentinel'),
+        state.picks.filter((pick) => !isSyncedStockPick(pick)),
         cloudPicks
       )
     });
@@ -511,6 +511,26 @@
     return fallback;
   }
 
+  function tradingViewChartUrl(symbol) {
+    const cleanSymbol = String(symbol || '').replace(/\.NS$/i, '').trim().toUpperCase();
+    return cleanSymbol && cleanSymbol !== 'UNKNOWN'
+      ? `https://www.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(cleanSymbol)}`
+      : '';
+  }
+
+  function isSyncedStockPick(pick) {
+    const origin = String(pick?.origin || pick?.scanner || '').toLowerCase();
+    const id = String(pick?.id || '').toLowerCase();
+    const source = String(pick?.source || '').toUpperCase();
+    return (
+      origin.includes('nse sentinel') ||
+      origin.includes('odysseus/nse') ||
+      id.startsWith('nse-') ||
+      id.startsWith('odysseus-ai-') ||
+      (source === 'AI' && !origin)
+    );
+  }
+
   function pickRange(item, lowKeys, highKeys) {
     const low = pickValue(item, lowKeys);
     const high = pickValue(item, highKeys);
@@ -537,14 +557,16 @@
       (item && item.snapshot && typeof item.snapshot === 'object' ? item.snapshot : null) ||
       {};
     item = { ...snapshot, ...data, ...(item || {}) };
+    const symbol = String(pickValue(item, ['symbol', 'ticker', 'name'], 'UNKNOWN')).toUpperCase();
     const entry = pickValue(item, ['entry', 'entry_price', 'Entry']) ||
       pickRange(item, ['entry_low', 'Entry Low'], ['entry_high', 'Entry High']);
     const target = pickValue(item, ['target', 'target_price', 'Target 1', 'Target']);
     const stop = pickValue(item, ['stop', 'stop_loss', 'sl', 'ATR SL', 'Stop Loss', 'Stop', 'SL']);
     const confidence = Number(pickValue(item, ['confidence', 'score', 'tomorrow_score', 'Prediction Score'], 0)) || 0;
+    const chartUrl = String(pickValue(item, ['chart_url', 'TradingView', 'Chart'], '') || tradingViewChartUrl(symbol));
     return {
       id: item.id || uid('pick'),
-      symbol: String(pickValue(item, ['symbol', 'ticker', 'name'], 'UNKNOWN')).toUpperCase(),
+      symbol,
       name: String(pickValue(item, ['name', 'company', 'title'], '')),
       source: String(pickValue(item, ['source', 'type'], 'Manual')).toLowerCase().includes('ai')
         ? 'AI'
@@ -563,7 +585,7 @@
       confidence,
       notes: String(pickValue(item, ['notes', 'reason', 'summary', 'Positive Reasons', 'Battle Notes', 'Smart Notes'], '')),
       warnings: String(pickValue(item, ['warnings', 'Warnings', 'Risk Notes', 'Gate Reasons'], '')),
-      chartUrl: String(pickValue(item, ['chart_url', 'TradingView', 'Chart'], '')),
+      chartUrl,
       origin: item.origin || item.scanner || '',
       createdAt: item.createdAt || new Date().toISOString()
     };
@@ -725,7 +747,7 @@
               <dl>${rows || '<dt>Status</dt><dd>Waiting for detail sync</dd>'}</dl>
               ${pick.notes ? `<small class="pick-notes">${escapeHtml(pick.notes)}</small>` : ''}
               ${pick.warnings ? `<small class="pick-warning">${escapeHtml(pick.warnings)}</small>` : ''}
-              ${pick.chartUrl ? `<a class="pick-link" href="${escapeHtml(pick.chartUrl)}" target="_blank" rel="noreferrer">Open chart</a>` : ''}
+              ${pick.chartUrl ? `<div class="pick-actions"><a class="pick-link" href="${escapeHtml(pick.chartUrl)}" target="_blank" rel="noreferrer">Open chart</a></div>` : ''}
             </div>`;
           })
           .join('')

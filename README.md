@@ -1,5 +1,5 @@
 # HK Dashboard
-
+https://hk-dashboard-omega.vercel.app/ --->>> Jump into hk's dashboard 
 Personal dashboard for notes, todo, reminders, gallery, 30-day growth tracking, tomorrow stock picks, and quick links.
 
 It is built to work in two modes:

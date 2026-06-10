@@ -27,6 +27,12 @@ function parseDotEnv(filePath) {
 const fileEnv = parseDotEnv(envPath);
 const read = (key) => process.env[key] || fileEnv[key] || '';
 
+function normalizePublicUrl(value) {
+  const trimmed = String(value || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 const config = {
   SUPABASE_URL: read('VITE_SUPABASE_URL') || read('NEXT_PUBLIC_SUPABASE_URL'),
   SUPABASE_ANON_KEY:
@@ -34,7 +40,14 @@ const config = {
     read('VITE_SUPABASE_PUBLISHABLE_KEY') ||
     read('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
     read('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
-  STOCK_PICKS_URL: read('VITE_STOCK_PICKS_URL') || read('NEXT_PUBLIC_STOCK_PICKS_URL')
+  STOCK_PICKS_URL: read('VITE_STOCK_PICKS_URL') || read('NEXT_PUBLIC_STOCK_PICKS_URL'),
+  SITE_URL: normalizePublicUrl(
+    read('VITE_SITE_URL') ||
+      read('NEXT_PUBLIC_SITE_URL') ||
+      read('SITE_URL') ||
+      read('VERCEL_PROJECT_PRODUCTION_URL') ||
+      read('VERCEL_URL')
+  )
 };
 
 fs.mkdirSync(publicDir, { recursive: true });

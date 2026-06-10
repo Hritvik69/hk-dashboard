@@ -228,6 +228,11 @@
     render();
   }
 
+  function authRedirectUrl() {
+    const configured = String(config.SITE_URL || '').trim().replace(/\/+$/, '');
+    return configured || window.location.origin;
+  }
+
   function markSynced(label = 'Synced') {
     syncText = `${label} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
@@ -446,14 +451,15 @@
       return;
     }
 
+    const redirectTo = authRedirectUrl();
     const result = await client.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin
+        emailRedirectTo: redirectTo
       }
     });
 
-    setNotice(result.error ? result.error.message : 'Check your email for the login link.');
+    setNotice(result.error ? result.error.message : `Check your email for the login link. It will open ${redirectTo}.`);
   }
 
   async function signOut() {

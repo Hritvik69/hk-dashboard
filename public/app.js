@@ -980,7 +980,6 @@
         ${renderPicks()}
         ${renderGrowth()}
         ${renderGallery()}
-        ${renderAccount()}
       </section>
     </main>
     ${renderFileModal()}`;

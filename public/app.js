@@ -908,7 +908,7 @@
     root.innerHTML = `<main class="app-shell">
       <section class="hero-panel">
         <div class="status-strip">
-          <div class="brand-mark"><span class="icon">HK</span></div>
+          <div class="brand-mark"><img class="brand-logo" src="/hk-logo.svg" alt="HK logo" /></div>
           <div><p class="eyebrow">Personal Workspace</p><h1>HK Dashboard</h1></div>
           <div class="clock-card"><span>${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
         </div>

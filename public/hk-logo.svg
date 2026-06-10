@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">HK Logo</title>
+  <desc id="desc">HK monogram logo for the dashboard.</desc>
+  <defs>
+    <linearGradient id="hk-bg" x1="18" y1="14" x2="116" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17233a"/>
+      <stop offset="0.56" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#271634"/>
+    </linearGradient>
+    <linearGradient id="hk-accent" x1="22" y1="24" x2="110" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4de3f2"/>
+      <stop offset="0.52" stop-color="#8c6dff"/>
+      <stop offset="1" stop-color="#ff5f7a"/>
+    </linearGradient>
+    <filter id="hk-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="#070b16"/>
+  <rect x="7" y="7" width="114" height="114" rx="20" fill="url(#hk-bg)" stroke="#4de3f2" stroke-opacity="0.34" stroke-width="2"/>
+  <path d="M24 33h80" stroke="#4de3f2" stroke-width="4" stroke-linecap="round" opacity="0.86"/>
+  <path d="M24 95h80" stroke="#ff5f7a" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M31 96L96 31" stroke="url(#hk-accent)" stroke-width="7" stroke-linecap="round" opacity="0.72" filter="url(#hk-glow)"/>
+  <text x="64" y="79" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="46" font-weight="900" letter-spacing="2" fill="#f8fbff">HK</text>
+  <text x="64" y="79" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="46" font-weight="900" letter-spacing="2" fill="none" stroke="url(#hk-accent)" stroke-width="1.4" opacity="0.95">HK</text>
+</svg>

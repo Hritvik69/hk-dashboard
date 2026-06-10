@@ -148,10 +148,15 @@ button.active {
   place-items: center;
   width: 48px;
   height: 48px;
-  color: var(--cyan);
-  border: 1px solid rgba(73, 215, 233, 0.28);
   border-radius: 8px;
-  background: rgba(73, 215, 233, 0.1);
+  background: rgba(73, 215, 233, 0.08);
+  box-shadow: 0 12px 30px rgba(73, 215, 233, 0.12);
+}
+
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
 }
 
 .icon {

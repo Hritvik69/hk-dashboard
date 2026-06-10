@@ -17,7 +17,7 @@
   let state = mergeDashboard(readLocal());
   const ui = {
     monthCursor: new Date(),
-    selectedDate: todayKey(),
+    selectedDate: todayKey(1),
     pickFilter: 'All',
     activeFileId: '',
     activeFileUrl: '',
@@ -686,7 +686,7 @@
       <div class="month-grid">${days}</div>
       <div class="event-form">
         <input id="event-title" placeholder="Add reminder or event" />
-        <input id="event-date" type="date" value="${todayKey(1)}" />
+        <input id="event-date" type="date" value="${ui.selectedDate || todayKey(1)}" />
         <input id="event-time" type="time" value="09:00" />
         <button type="button" id="add-event">Add</button>
       </div>
@@ -1157,7 +1157,7 @@
 
   function addEvent() {
     const title = document.getElementById('event-title')?.value.trim();
-    const date = document.getElementById('event-date')?.value || todayKey(1);
+    const date = document.getElementById('event-date')?.value || ui.selectedDate || todayKey(1);
     const time = document.getElementById('event-time')?.value || '';
     if (!title) return;
 

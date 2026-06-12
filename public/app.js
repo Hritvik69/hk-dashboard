@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = 'hk-dashboard-state-v1';
   const FILE_BUCKET = 'dashboard-files';
+  const ACCESS_KEY_STORAGE = 'hk-dashboard-access-key';
   const SYNC_INTERVAL_MS = 20000;
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
@@ -45,6 +46,7 @@
       habits: [],
       picks: [],
       photos: [],
+      growthStartDate: todayKey(),
       updatedAt: now
     };
   }
@@ -61,6 +63,7 @@
       habits: Array.isArray(data.habits) ? data.habits : defaults.habits,
       picks: Array.isArray(data.picks) ? data.picks : defaults.picks,
       photos: Array.isArray(data.photos) ? data.photos : Array.isArray(data.files) ? data.files : defaults.photos,
+      growthStartDate: data.growthStartDate || inferGrowthStartDate(data.habits) || defaults.growthStartDate,
       updatedAt: data.updatedAt || defaults.updatedAt
     });
   }
@@ -81,6 +84,13 @@
       (Array.isArray(data.tasks) && data.tasks.some((task) => task.id === 'task-first')) ||
       (Array.isArray(data.habits) && data.habits.some((habit) => habit.id === 'habit-admin'))
     );
+  }
+
+  function hasDashboardContent(data) {
+    if (!data || typeof data !== 'object') return false;
+    return ['notes', 'tasks', 'events', 'habits', 'picks', 'photos'].some((key) => {
+      return Array.isArray(data[key]) && data[key].length > 0;
+    });
   }
 
   function uid(prefix) {
@@ -112,6 +122,40 @@
       month: 'short',
       day: 'numeric'
     });
+  }
+
+  function addDaysKey(startKey, offset) {
+    const [year, month, day] = String(startKey || todayKey()).split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() + offset);
+    return dateKey(date);
+  }
+
+  function isDateKey(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+  }
+
+  function habitStartKey(habit) {
+    if (isDateKey(habit?.startDate)) return habit.startDate;
+    if (habit?.createdAt) {
+      const created = new Date(habit.createdAt);
+      if (!Number.isNaN(created.getTime())) return dateKey(created);
+    }
+    const checkedDays = Object.keys(habit?.checks || {}).filter(isDateKey).sort();
+    return checkedDays[0] || '';
+  }
+
+  function inferGrowthStartDate(habits) {
+    const starts = (Array.isArray(habits) ? habits : [])
+      .map(habitStartKey)
+      .filter(isDateKey)
+      .sort();
+    return starts[0] || '';
+  }
+
+  function growthStartKey() {
+    if (isDateKey(state.growthStartDate)) return state.growthStartDate;
+    return inferGrowthStartDate(state.habits) || todayKey();
   }
 
   function escapeHtml(value) {
@@ -180,6 +224,52 @@
       reader.onerror = () => reject(new Error('File read failed.'));
       reader.readAsDataURL(file);
     });
+  }
+
+  function apiHeaders(extra = {}) {
+    const headers = { ...extra };
+    const accessKey = localStorage.getItem(ACCESS_KEY_STORAGE) || '';
+    if (accessKey) headers['x-dashboard-access-key'] = accessKey;
+    return headers;
+  }
+
+  async function apiRequest(url, options = {}, retry = true) {
+    const response = await fetch(url, {
+      ...options,
+      headers: apiHeaders(options.headers || {})
+    });
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : {};
+
+    if (response.status === 401 && retry) {
+      const nextKey = window.prompt('Enter dashboard access key');
+      if (nextKey) {
+        localStorage.setItem(ACCESS_KEY_STORAGE, nextKey.trim());
+        return apiRequest(url, options, false);
+      }
+    }
+
+    if (!contentType.includes('application/json')) {
+      throw new Error('Dashboard cloud API is not available here.');
+    }
+
+    if (!response.ok) {
+      throw new Error(payload.error || 'Dashboard cloud request failed.');
+    }
+
+    return payload;
+  }
+
+  async function fileApi(action, body = {}, retry = true) {
+    return apiRequest(
+      `/api/files?action=${encodeURIComponent(action)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, action })
+      },
+      retry
+    );
   }
 
   function dataUrlToText(url) {
@@ -251,6 +341,8 @@
   }
 
   async function initCloud() {
+    await loadServerState({ force: true, silent: true }).catch(() => {});
+
     if (!config.SUPABASE_URL || !config.SUPABASE_ANON_KEY) {
       statusText = 'Local browser saving';
       render();
@@ -339,12 +431,12 @@
 
   async function syncCloudNow(options = {}) {
     const { force = false, silent = false } = options;
-    if (!client) return;
 
     if (session) {
       await loadCloud({ force, silent: true });
     } else {
-      await loadCloudPicks({ silent: true });
+      await loadServerState({ force, silent: true }).catch(() => {});
+      if (client) await loadCloudPicks({ silent: true });
     }
 
     markSynced(session ? 'Cloud synced' : 'Picks synced');
@@ -428,8 +520,44 @@
     return cloudPicks.length;
   }
 
+  async function loadServerState(options = {}) {
+    const { force = false } = options;
+    const payload = await apiRequest('/api/state', { method: 'GET' });
+    if (payload.data) {
+      const remoteState = mergeDashboard(payload.data);
+      const remoteTime = Date.parse(payload.updatedAt || remoteState.updatedAt || '') || 0;
+      const localTime = Date.parse(state.updatedAt || '') || 0;
+      if (force || !hasLoadedCloud || remoteTime >= localTime) {
+        state = remoteState;
+        writeLocal(state);
+      }
+      hasLoadedCloud = true;
+      return true;
+    }
+
+    if (hasDashboardContent(state)) {
+      await saveServerState();
+    }
+    hasLoadedCloud = true;
+    return false;
+  }
+
+  async function saveServerState() {
+    const payload = await apiRequest('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: state })
+    });
+    markSynced('Saved');
+    return payload;
+  }
+
   async function saveCloud() {
-    if (!client || !session) return;
+    if (!session) {
+      await saveServerState().catch(() => {});
+      return;
+    }
+    if (!client) return;
 
     const result = await client.from('dashboard_state').upsert({
       user_id: session.user.id,
@@ -799,7 +927,8 @@
   }
 
   function renderGrowth() {
-    const days = Array.from({ length: 30 }, (_, index) => todayKey(index));
+    const startKey = growthStartKey();
+    const days = Array.from({ length: 30 }, (_, index) => addDaysKey(startKey, index));
     const dayHeader = `<div class="habit-days"><span></span>${days.map((day) => `<b>${day.split('-')[2]}</b>`).join('')}</div>`;
     const rows = state.habits
       .map((habit) => {
@@ -1231,12 +1360,15 @@
 
     mutate((current) => ({
       ...current,
+      growthStartDate: current.growthStartDate || todayKey(),
       habits: [
         ...current.habits,
         {
           id: uid('habit'),
           name,
           color: '#8b5cf6',
+          startDate: current.growthStartDate || todayKey(),
+          createdAt: new Date().toISOString(),
           checks: {}
         }
       ]
@@ -1254,7 +1386,7 @@
         } else {
           checks[day] = true;
         }
-        return { ...habit, checks };
+        return { ...habit, startDate: habitStartKey(habit) || day, checks };
       })
     }));
   }
@@ -1270,13 +1402,9 @@
 
     for (const file of selected) {
       try {
-        if (client && session) {
-          uploaded.push(await uploadStoredFile(file));
-        } else {
-          uploaded.push(await createLocalFileRecord(file));
-          usedLocalFallback = true;
-        }
-      } catch {
+        uploaded.push(await uploadStoredFile(file));
+      } catch (error) {
+        console.warn('Cloud file upload failed; using browser fallback.', error);
         uploaded.push(await createLocalFileRecord(file));
         usedLocalFallback = true;
       }
@@ -1289,8 +1417,8 @@
 
     setNotice(
       usedLocalFallback
-        ? 'Files saved in dashboard data. Sign in and run the Supabase storage SQL for full cloud file storage.'
-        : `${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded.`
+        ? 'Some files were saved only in this browser because cloud storage was not ready.'
+        : `${uploaded.length} file${uploaded.length === 1 ? '' : 's'} saved to cloud storage.`
     );
   }
 
@@ -1310,15 +1438,24 @@
   async function uploadStoredFile(file) {
     const id = uid('file');
     const type = file.type || 'application/octet-stream';
-    const path = `${session.user.id}/${id}-${safeFileName(file.name)}`;
     const thumbUrl = type.startsWith('image/') ? await createImageThumb(file).catch(() => '') : '';
+    if (!client || !client.storage || typeof client.storage.from !== 'function') {
+      throw new Error('Supabase browser client is not ready.');
+    }
 
-    const result = await client.storage.from(FILE_BUCKET).upload(path, file, {
-      cacheControl: '3600',
-      contentType: type,
-      upsert: false
+    const signed = await fileApi('upload-url', {
+      id,
+      bucket: FILE_BUCKET,
+      name: file.name,
+      type,
+      size: file.size
     });
+    const bucket = signed.bucket || FILE_BUCKET;
+    const path = signed.path;
+    const token = signed.token;
+    if (!path || !token) throw new Error('Cloud upload token was not created.');
 
+    const result = await client.storage.from(bucket).uploadToSignedUrl(path, token, file);
     if (result.error) throw result.error;
 
     return {
@@ -1326,7 +1463,7 @@
       name: file.name,
       type,
       size: file.size,
-      storageBucket: FILE_BUCKET,
+      storageBucket: bucket,
       storagePath: path,
       thumbUrl,
       createdAt: new Date().toISOString(),
@@ -1401,12 +1538,15 @@
   }
 
   async function fetchStoredFile(file) {
-    if (!client || !session) throw new Error('Sign in to open cloud files.');
-    const result = await client.storage
-      .from(file.storageBucket || FILE_BUCKET)
-      .download(file.storagePath);
-    if (result.error) throw result.error;
-    return result.data;
+    if (!file.storagePath) throw new Error('No cloud file path found.');
+    const signed = await fileApi('read-url', {
+      bucket: file.storageBucket || FILE_BUCKET,
+      path: file.storagePath
+    });
+    if (!signed.signedUrl) throw new Error('Could not create file link.');
+    const response = await fetch(signed.signedUrl);
+    if (!response.ok) throw new Error('Could not open this file.');
+    return response.blob();
   }
 
   async function downloadFile(id) {
@@ -1442,8 +1582,16 @@
     const file = (state.photos || []).find((item) => item.id === id);
     if (!file) return;
 
-    if (file.storagePath && client && session) {
-      await client.storage.from(file.storageBucket || FILE_BUCKET).remove([file.storagePath]);
+    if (file.storagePath) {
+      try {
+        await fileApi('delete', {
+          bucket: file.storageBucket || FILE_BUCKET,
+          path: file.storagePath
+        });
+      } catch (error) {
+        setNotice(error.message || 'Could not remove cloud file.');
+        return;
+      }
     }
 
     if (ui.activeFileId === id) closeFile();

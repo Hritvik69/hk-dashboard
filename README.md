@@ -24,6 +24,7 @@ Open `http://127.0.0.1:5173`.
 4. Add Supabase environment variables if you want login and cloud sync:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` for permanent file uploads through the server API
    - `VITE_SITE_URL` with your live Vercel dashboard URL
    - Or use Supabase/Vercel style names:
      - `NEXT_PUBLIC_SUPABASE_URL`
@@ -54,6 +55,10 @@ NEXT_PUBLIC_SITE_URL=https://your-dashboard.vercel.app
 
 The app uses Supabase Auth magic links. Once signed in, your dashboard data is saved per user.
 Set `NEXT_PUBLIC_SITE_URL` or `VITE_SITE_URL` on Vercel to keep login links pointed at the live dashboard instead of a local preview URL.
+
+## Permanent File Storage
+
+Run `supabase/schema.sql`, then add `SUPABASE_SERVICE_ROLE_KEY` to Vercel. The dashboard uses `/api/files` to create short-lived Supabase Storage links, so uploads, previews, downloads, and deletes work without showing a login panel. It also uses `/api/state` to save the dashboard state as `personal/dashboard-state.json` in the same storage bucket, so file cards, notes, tasks, calendar items, and habits can persist without the removed sign-in panel. Optionally add `DASHBOARD_ACCESS_KEY` on Vercel if you want these APIs to ask for a private access key before allowing actions.
 
 ## Connect Odysseus
 

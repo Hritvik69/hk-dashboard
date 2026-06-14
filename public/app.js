@@ -2,6 +2,8 @@
   const STORAGE_KEY = 'hk-dashboard-state-v1';
   const FILE_BUCKET = 'dashboard-files';
   const ACCESS_KEY_STORAGE = 'hk-dashboard-access-key';
+  const GATE_STORAGE = 'hk-dashboard-unlocked-v1';
+  const DASHBOARD_PASSWORD_HASH = 'aea89001a424050979c7d8f5d8aee4609a8b8416a9828940a4aabca0f0809d20';
   const SYNC_INTERVAL_MS = 20000;
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
@@ -11,6 +13,7 @@
   let saveTimer = null;
   let syncTimer = null;
   let realtimeChannel = null;
+  let cloudBooted = false;
   let hasLoadedCloud = false;
   let statusText = 'Local browser saving';
   let syncText = 'Not synced yet';
@@ -25,7 +28,8 @@
     activeFileText: '',
     activeFileObjectUrl: '',
     activeFileLoading: false,
-    activeFileError: ''
+    activeFileError: '',
+    gateError: ''
   };
 
   const quickLinks = [
@@ -338,6 +342,15 @@
     clearTimeout(saveTimer);
     writeLocal(state);
     saveTimer = setTimeout(saveCloud, 450);
+  }
+
+  function bootCloud() {
+    if (cloudBooted) return;
+    cloudBooted = true;
+    initCloud().catch((error) => {
+      statusText = `Cloud setup failed: ${error.message}`;
+      render();
+    });
   }
 
   async function initCloud() {
@@ -1076,7 +1089,83 @@
     </article>`;
   }
 
+  function isDashboardUnlocked() {
+    try {
+      return sessionStorage.getItem(GATE_STORAGE) === 'yes';
+    } catch {
+      return false;
+    }
+  }
+
+  async function hashText(value) {
+    const bytes = new TextEncoder().encode(value);
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  function renderPasswordGate() {
+    return `<main class="gate-shell">
+      <section class="gate-card">
+        <div class="gate-brand">
+          <div class="brand-mark"><img class="brand-logo" src="/hk-logo.svg" alt="HK logo" /></div>
+          <div>
+            <p class="eyebrow">Private Dashboard</p>
+            <h1>HK Dashboard</h1>
+          </div>
+        </div>
+        <h2>Meet Your Father Who is Hritvik</h2>
+        <p class="gate-copy">To see the Dashboard, enter the password.</p>
+        <form class="gate-form" id="gate-form">
+          <input id="gate-password" type="password" placeholder="Password" autocomplete="current-password" />
+          <button type="submit" id="gate-submit">Open Dashboard</button>
+        </form>
+        ${ui.gateError ? `<p class="gate-error">${escapeHtml(ui.gateError)}</p>` : ''}
+      </section>
+    </main>`;
+  }
+
+  function bindGateEvents() {
+    const form = document.getElementById('gate-form');
+    const input = document.getElementById('gate-password');
+    const submit = document.getElementById('gate-submit');
+    input?.focus();
+
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const password = input?.value.trim() || '';
+      if (submit) submit.disabled = true;
+
+      try {
+        if (!window.crypto?.subtle) {
+          throw new Error('Secure browser crypto is not available here.');
+        }
+
+        const matches = (await hashText(password)) === DASHBOARD_PASSWORD_HASH;
+        if (!matches) {
+          ui.gateError = 'Wrong password.';
+          render();
+          return;
+        }
+
+        sessionStorage.setItem(GATE_STORAGE, 'yes');
+        localStorage.setItem(ACCESS_KEY_STORAGE, password);
+        ui.gateError = '';
+        render();
+        bootCloud();
+      } catch (error) {
+        ui.gateError = error.message || 'Could not unlock dashboard.';
+        render();
+      }
+    });
+  }
+
   function render() {
+    if (!isDashboardUnlocked()) {
+      root.innerHTML = renderPasswordGate();
+      bindGateEvents();
+      return;
+    }
+
     const now = new Date();
     const openTasks = state.tasks.filter((task) => !task.done);
     const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
@@ -1630,8 +1719,5 @@
   }
 
   render();
-  initCloud().catch((error) => {
-    statusText = `Cloud setup failed: ${error.message}`;
-    render();
-  });
+  if (isDashboardUnlocked()) bootCloud();
 })();

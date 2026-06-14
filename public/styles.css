@@ -118,6 +118,60 @@ button.active {
   padding: 28px 0 44px;
 }
 
+.gate-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.gate-card {
+  width: min(100%, 520px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(73, 215, 233, 0.12), rgba(255, 92, 122, 0.08)),
+    var(--panel-strong);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.36);
+  padding: 26px;
+  backdrop-filter: blur(18px);
+}
+
+.gate-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.gate-card h1 {
+  margin: 0;
+}
+
+.gate-card h2 {
+  margin: 0 0 10px;
+  font-size: 38px;
+  line-height: 1.02;
+}
+
+.gate-copy {
+  margin-bottom: 22px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.gate-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.gate-error {
+  margin: 14px 0 0;
+  color: var(--rose);
+  font-weight: 800;
+}
+
 .hero-panel,
 .panel {
   border: 1px solid var(--line);
@@ -963,10 +1017,19 @@ h3 {
   .event-form,
   .pick-form,
   .compose-row,
+  .gate-form,
   .account-form,
   .backup-row,
   .photo-grid {
     grid-template-columns: 1fr;
+  }
+
+  .gate-card {
+    padding: 20px;
+  }
+
+  .gate-card h2 {
+    font-size: 32px;
   }
 
   .panel {

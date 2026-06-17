@@ -4,6 +4,9 @@
   const ACCESS_KEY_STORAGE = 'hk-dashboard-access-key';
   const GATE_STORAGE = 'hk-dashboard-unlocked-v1';
   const DASHBOARD_PASSWORD_HASH = 'aea89001a424050979c7d8f5d8aee4609a8b8416a9828940a4aabca0f0809d20';
+  const DEFAULT_ALBUM_ID = 'album-default';
+  const ALBUM_UNLOCK_STORAGE = 'hk-dashboard-album-unlocked-v1';
+  const ALBUM_PASSWORD_HASH = 'aaef22647a24721100b6e9d6c40d6cc603de3db95cd848b99fff75752f2ac64d';
   const DEFAULT_REMOTE_SITE_URL = 'https://hk-dashboard-omega.vercel.app';
   const SYNC_INTERVAL_MS = 20000;
   const config = window.HK_CONFIG || {};
@@ -30,6 +33,8 @@
     activeFileObjectUrl: '',
     activeFileLoading: false,
     activeFileError: '',
+    selectedAlbumId: DEFAULT_ALBUM_ID,
+    albumError: '',
     gateError: ''
   };
 
@@ -42,6 +47,60 @@
     ['ChatGPT', 'https://chatgpt.com/', 'AI']
   ];
 
+  function defaultAlbum(createdAt = '') {
+    return {
+      id: DEFAULT_ALBUM_ID,
+      name: 'Default',
+      locked: false,
+      createdAt
+    };
+  }
+
+  function albumIdFromName(name, index) {
+    const slug = String(name || 'album')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    return `album-${slug || 'folder'}-${index}`;
+  }
+
+  function normalizeFiles(files) {
+    return (Array.isArray(files) ? files : []).map((file) => ({
+      ...file,
+      albumId: file.albumId || DEFAULT_ALBUM_ID
+    }));
+  }
+
+  function normalizeAlbums(albums, files, createdAt) {
+    const map = new Map([[DEFAULT_ALBUM_ID, defaultAlbum(createdAt)]]);
+    (Array.isArray(albums) ? albums : []).forEach((album, index) => {
+      const name = String(album?.name || '').trim();
+      if (!name) return;
+      const id = album.id || albumIdFromName(name, index);
+      map.set(id, {
+        id,
+        name,
+        locked: Boolean(album.locked),
+        createdAt: album.createdAt || createdAt
+      });
+    });
+
+    (Array.isArray(files) ? files : []).forEach((file) => {
+      const albumId = file.albumId || DEFAULT_ALBUM_ID;
+      if (!map.has(albumId)) {
+        map.set(albumId, {
+          id: albumId,
+          name: file.albumName || 'Imported',
+          locked: false,
+          createdAt: file.createdAt || createdAt
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }
+
   function defaultDashboard() {
     const now = new Date().toISOString();
     return {
@@ -50,6 +109,7 @@
       events: [],
       habits: [],
       picks: [],
+      albums: [defaultAlbum(now)],
       photos: [],
       growthStartDate: todayKey(),
       updatedAt: now
@@ -59,6 +119,8 @@
   function mergeDashboard(input) {
     const defaults = defaultDashboard();
     const data = input && typeof input === 'object' ? input : {};
+    const photos = normalizeFiles(Array.isArray(data.photos) ? data.photos : Array.isArray(data.files) ? data.files : defaults.photos);
+    const albums = normalizeAlbums(Array.isArray(data.albums) ? data.albums : defaults.albums, photos, data.updatedAt || defaults.updatedAt);
     return cleanSeedData({
       ...defaults,
       ...data,
@@ -67,7 +129,8 @@
       events: Array.isArray(data.events) ? data.events : defaults.events,
       habits: Array.isArray(data.habits) ? data.habits : defaults.habits,
       picks: Array.isArray(data.picks) ? data.picks : defaults.picks,
-      photos: Array.isArray(data.photos) ? data.photos : Array.isArray(data.files) ? data.files : defaults.photos,
+      albums,
+      photos,
       growthStartDate: data.growthStartDate || inferGrowthStartDate(data.habits) || defaults.growthStartDate,
       updatedAt: data.updatedAt || defaults.updatedAt
     });
@@ -95,7 +158,7 @@
     if (!data || typeof data !== 'object') return false;
     return ['notes', 'tasks', 'events', 'habits', 'picks', 'photos'].some((key) => {
       return Array.isArray(data[key]) && data[key].length > 0;
-    });
+    }) || (Array.isArray(data.albums) && data.albums.length > 1);
   }
 
   function uid(prefix) {
@@ -992,11 +1055,57 @@
     </article>`;
   }
 
+  function activeAlbum() {
+    const albums = state.albums && state.albums.length ? state.albums : [defaultAlbum(state.updatedAt)];
+    return albums.find((album) => album.id === ui.selectedAlbumId) || albums[0] || defaultAlbum(state.updatedAt);
+  }
+
+  function albumUnlockKey(id) {
+    return `${ALBUM_UNLOCK_STORAGE}-${id}`;
+  }
+
+  function isAlbumUnlocked(album) {
+    if (!album?.locked) return true;
+    try {
+      return sessionStorage.getItem(albumUnlockKey(album.id)) === 'yes';
+    } catch {
+      return false;
+    }
+  }
+
   function renderGallery() {
-    const files = state.photos || [];
-    const totalSize = files.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
-    const filesHtml = files.length
-      ? files
+    const albums = state.albums && state.albums.length ? state.albums : [defaultAlbum(state.updatedAt)];
+    const album = activeAlbum();
+    const locked = !isAlbumUnlocked(album);
+    const files = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === album.id);
+    const visibleFiles = locked ? [] : files;
+    const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+    const albumTabs = albums
+      .map((item) => {
+        const count = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === item.id).length;
+        const active = item.id === album.id ? 'active' : '';
+        const lock = item.locked ? ' locked' : '';
+        return `<button type="button" class="${active}${lock}" data-album-select="${escapeHtml(item.id)}">
+          <span>${item.locked ? 'Locked' : 'Album'}</span>
+          <strong>${escapeHtml(item.name)}</strong>
+          <small>${count}</small>
+        </button>`;
+      })
+      .join('');
+    const lockedHtml = `<div class="album-lock-panel">
+      <span class="file-icon large">LOCK</span>
+      <div>
+        <h3>${escapeHtml(album.name)} is locked</h3>
+        <p class="muted-copy">Enter album password to open these files.</p>
+        <form class="album-unlock-form" id="album-unlock-form">
+          <input id="album-password" type="password" placeholder="Album password" autocomplete="current-password" />
+          <button type="submit">Unlock</button>
+        </form>
+        ${ui.albumError ? `<p class="gate-error">${escapeHtml(ui.albumError)}</p>` : ''}
+      </div>
+    </div>`;
+    const filesHtml = visibleFiles.length
+      ? visibleFiles
           .slice(0, 8)
           .map(renderFileCard)
           .join('')
@@ -1004,10 +1113,16 @@
 
     return `<article class="panel gallery-panel">
       <header class="panel-header">
-        <div><p class="eyebrow">Gallery &amp; Files</p><h2>${files.length} files</h2><p>${formatBytes(totalSize)}</p></div>
-        <label class="file-button">Upload<input id="file-input" type="file" multiple /></label>
+        <div><p class="eyebrow">Gallery &amp; Files</p><h2>${escapeHtml(album.name)} - ${visibleFiles.length} files</h2><p>${formatBytes(totalSize)}</p></div>
+        <label class="file-button ${locked ? 'disabled' : ''}">Upload<input id="file-input" type="file" multiple ${locked ? 'disabled' : ''} /></label>
       </header>
-      <div class="photo-grid">${filesHtml}</div>
+      <div class="album-form">
+        <input id="album-name" placeholder="New album/folder name" />
+        <label class="checkbox-line"><input id="album-locked" type="checkbox" /> Lock with password</label>
+        <button type="button" id="add-album">Add album</button>
+      </div>
+      <div class="album-tabs">${albumTabs}</div>
+      ${locked ? lockedHtml : `<div class="photo-grid">${filesHtml}</div>`}
     </article>`;
   }
 
@@ -1296,6 +1411,17 @@
       button.addEventListener('click', () => deleteFile(button.dataset.fileDelete));
     });
 
+    document.querySelectorAll('[data-album-select]').forEach((button) => {
+      button.addEventListener('click', () => selectAlbum(button.dataset.albumSelect));
+    });
+
+    byId('add-album')?.addEventListener('click', addAlbum);
+    byId('album-name')?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') addAlbum();
+    });
+
+    byId('album-unlock-form')?.addEventListener('submit', unlockActiveAlbum);
+
     document.querySelectorAll('.file-preview img').forEach((image) => {
       image.addEventListener('error', () => {
         image.closest('.file-preview')?.classList.add('preview-failed');
@@ -1504,10 +1630,71 @@
     }));
   }
 
+  function selectAlbum(id) {
+    if (!id) return;
+    ui.selectedAlbumId = id;
+    ui.albumError = '';
+    render();
+  }
+
+  function addAlbum() {
+    const name = document.getElementById('album-name')?.value.trim();
+    const locked = Boolean(document.getElementById('album-locked')?.checked);
+    if (!name) return;
+
+    const id = uid('album');
+    ui.selectedAlbumId = id;
+    ui.albumError = '';
+    if (locked) {
+      try {
+        sessionStorage.setItem(albumUnlockKey(id), 'yes');
+      } catch {}
+    }
+
+    mutate((current) => ({
+      ...current,
+      albums: [
+        ...current.albums,
+        {
+          id,
+          name,
+          locked,
+          createdAt: new Date().toISOString()
+        }
+      ]
+    }));
+  }
+
+  async function unlockActiveAlbum(event) {
+    event.preventDefault();
+    const album = activeAlbum();
+    const password = document.getElementById('album-password')?.value.trim() || '';
+
+    try {
+      if ((await hashText(password)) !== ALBUM_PASSWORD_HASH) {
+        ui.albumError = 'Wrong album password.';
+        render();
+        return;
+      }
+
+      sessionStorage.setItem(albumUnlockKey(album.id), 'yes');
+      ui.albumError = '';
+      render();
+    } catch (error) {
+      ui.albumError = error.message || 'Could not unlock album.';
+      render();
+    }
+  }
+
   async function addFiles(event) {
     const selected = Array.from((event.target.files || [])).filter(Boolean);
     event.target.value = '';
     if (!selected.length) return;
+    const album = activeAlbum();
+    if (!isAlbumUnlocked(album)) {
+      setNotice('Unlock this album before uploading files.');
+      return;
+    }
 
     setNotice(`Uploading ${selected.length} file${selected.length === 1 ? '' : 's'}...`);
     const uploaded = [];
@@ -1515,10 +1702,10 @@
 
     for (const file of selected) {
       try {
-        uploaded.push(await uploadStoredFile(file));
+        uploaded.push(await uploadStoredFile(file, album.id));
       } catch (error) {
         console.warn('Cloud file upload failed; using browser fallback.', error);
-        uploaded.push(await createLocalFileRecord(file));
+        uploaded.push(await createLocalFileRecord(file, album.id));
         usedLocalFallback = true;
       }
     }
@@ -1535,7 +1722,7 @@
     );
   }
 
-  async function createLocalFileRecord(file) {
+  async function createLocalFileRecord(file, albumId = DEFAULT_ALBUM_ID) {
     const dataUrl = await readFileDataUrl(file);
     return {
       id: uid('file'),
@@ -1543,12 +1730,13 @@
       type: file.type || 'application/octet-stream',
       url: dataUrl,
       size: file.size,
+      albumId,
       createdAt: new Date().toISOString(),
       origin: 'dashboard-data'
     };
   }
 
-  async function uploadStoredFile(file) {
+  async function uploadStoredFile(file, albumId = DEFAULT_ALBUM_ID) {
     const id = uid('file');
     const type = file.type || 'application/octet-stream';
     const thumbUrl = type.startsWith('image/') ? await createImageThumb(file).catch(() => '') : '';
@@ -1576,6 +1764,7 @@
       name: file.name,
       type,
       size: file.size,
+      albumId,
       storageBucket: bucket,
       storagePath: path,
       thumbUrl,

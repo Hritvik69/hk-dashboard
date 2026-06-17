@@ -728,6 +728,93 @@ h3 {
     linear-gradient(135deg, rgba(99, 210, 151, 0.94), rgba(73, 215, 233, 0.74));
 }
 
+.album-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.checkbox-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.checkbox-line input {
+  width: auto;
+  accent-color: var(--violet);
+}
+
+.album-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.album-tabs button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 8px;
+  justify-items: start;
+  min-height: 68px;
+  text-align: left;
+}
+
+.album-tabs button span {
+  grid-column: 1 / -1;
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.album-tabs button strong {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-tabs button small {
+  justify-self: end;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.album-tabs button.locked span {
+  color: var(--amber);
+}
+
+.album-lock-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  min-height: 190px;
+  border: 1px dashed rgba(158, 181, 219, 0.22);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(7, 11, 22, 0.42);
+}
+
+.album-unlock-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -835,6 +922,11 @@ h3 {
 
 .file-button {
   cursor: pointer;
+}
+
+.file-button.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .file-button input {
@@ -1016,11 +1108,21 @@ h3 {
   .split-list,
   .event-form,
   .pick-form,
+  .album-form,
+  .album-unlock-form,
   .compose-row,
   .gate-form,
   .account-form,
   .backup-row,
   .photo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .album-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .album-lock-panel {
     grid-template-columns: 1fr;
   }
 

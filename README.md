@@ -72,6 +72,10 @@ DASHBOARD_ACCESS_KEY=your_dashboard_password
 
 After deploying those env vars, open the dashboard once on the laptop browser that already has your local data and enter the password. If the cloud copy is empty or older, the laptop data is uploaded automatically. Then open the same Vercel URL on your phone and enter the same password; it will download the shared cloud data.
 
+## Gallery Albums
+
+Gallery & Files supports albums/folders. Uploads are saved into the selected album. Locked albums use a separate album password, so private folders can be opened only after unlocking them.
+
 ## Connect Odysseus
 
 Your live dashboard cannot directly read `127.0.0.1:7000`, because that only exists on your laptop. Use the local sync command instead.

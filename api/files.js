@@ -4,8 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 const DEFAULT_BUCKET = 'dashboard-files';
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-dashboard-access-key');
+}
+
 function json(res, status, payload) {
   res.statusCode = status;
+  setCors(res);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(payload));
 }
@@ -131,6 +138,7 @@ async function deleteFile(admin, body) {
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
+    setCors(res);
     res.statusCode = 204;
     res.end();
     return;

@@ -3,8 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 const STATE_BUCKET = 'dashboard-files';
 const STATE_PATH = 'personal/dashboard-state.json';
 
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-dashboard-access-key');
+}
+
 function json(res, status, payload) {
   res.statusCode = status;
+  setCors(res);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(payload));
 }
@@ -95,6 +102,7 @@ async function writeState(admin, body) {
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
+    setCors(res);
     res.statusCode = 204;
     res.end();
     return;

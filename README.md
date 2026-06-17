@@ -60,6 +60,18 @@ Set `NEXT_PUBLIC_SITE_URL` or `VITE_SITE_URL` on Vercel to keep login links poin
 
 Run `supabase/schema.sql`, then add `SUPABASE_SERVICE_ROLE_KEY` to Vercel. The dashboard uses `/api/files` to create short-lived Supabase Storage links, so uploads, previews, downloads, and deletes work without showing a login panel. It also uses `/api/state` to save the dashboard state as `personal/dashboard-state.json` in the same storage bucket, so file cards, notes, tasks, calendar items, and habits can persist without the removed sign-in panel. Optionally add `DASHBOARD_ACCESS_KEY` on Vercel if you want these APIs to ask for a private access key before allowing actions.
 
+## Same Data On Laptop And Phone
+
+For the same dashboard data everywhere, Vercel must have:
+
+```env
+NEXT_PUBLIC_SITE_URL=https://your-dashboard.vercel.app
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+DASHBOARD_ACCESS_KEY=your_dashboard_password
+```
+
+After deploying those env vars, open the dashboard once on the laptop browser that already has your local data and enter the password. If the cloud copy is empty or older, the laptop data is uploaded automatically. Then open the same Vercel URL on your phone and enter the same password; it will download the shared cloud data.
+
 ## Connect Odysseus
 
 Your live dashboard cannot directly read `127.0.0.1:7000`, because that only exists on your laptop. Use the local sync command instead.

@@ -4,6 +4,7 @@
   const ACCESS_KEY_STORAGE = 'hk-dashboard-access-key';
   const GATE_STORAGE = 'hk-dashboard-unlocked-v1';
   const DASHBOARD_PASSWORD_HASH = 'aea89001a424050979c7d8f5d8aee4609a8b8416a9828940a4aabca0f0809d20';
+  const DEFAULT_REMOTE_SITE_URL = 'https://hk-dashboard-omega.vercel.app';
   const SYNC_INTERVAL_MS = 20000;
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
@@ -237,8 +238,20 @@
     return headers;
   }
 
+  function isLocalOrigin() {
+    return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+  }
+
+  function apiUrl(path) {
+    const remote = String(config.SITE_URL || DEFAULT_REMOTE_SITE_URL).trim().replace(/\/+$/, '');
+    if (isLocalOrigin() && remote && remote !== window.location.origin) {
+      return `${remote}${path}`;
+    }
+    return path;
+  }
+
   async function apiRequest(url, options = {}, retry = true) {
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl(url), {
       ...options,
       headers: apiHeaders(options.headers || {})
     });
@@ -536,11 +549,22 @@
   async function loadServerState(options = {}) {
     const { force = false } = options;
     const payload = await apiRequest('/api/state', { method: 'GET' });
+    const localState = mergeDashboard(state);
+    const localHasContent = hasDashboardContent(localState);
+
     if (payload.data) {
       const remoteState = mergeDashboard(payload.data);
+      const remoteHasContent = hasDashboardContent(remoteState);
       const remoteTime = Date.parse(payload.updatedAt || remoteState.updatedAt || '') || 0;
-      const localTime = Date.parse(state.updatedAt || '') || 0;
-      if (force || !hasLoadedCloud || remoteTime >= localTime) {
+      const localTime = Date.parse(localState.updatedAt || '') || 0;
+
+      if (localHasContent && (!remoteHasContent || localTime > remoteTime)) {
+        await saveServerState();
+        hasLoadedCloud = true;
+        return true;
+      }
+
+      if (remoteHasContent || force || !hasLoadedCloud || remoteTime >= localTime) {
         state = remoteState;
         writeLocal(state);
       }
@@ -548,7 +572,7 @@
       return true;
     }
 
-    if (hasDashboardContent(state)) {
+    if (localHasContent) {
       await saveServerState();
     }
     hasLoadedCloud = true;

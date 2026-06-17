@@ -72,6 +72,8 @@ DASHBOARD_ACCESS_KEY=your_dashboard_password
 
 After deploying those env vars, open the dashboard once on the laptop browser that already has your local data and enter the password. If the cloud copy is empty or older, the laptop data is uploaded automatically. Then open the same Vercel URL on your phone and enter the same password; it will download the shared cloud data.
 
+Dashboard data is kept until you remove it. Notes, tasks, calendar items, stock picks, growth habits, albums, and files all have remove controls; cloud files and synced stock-pick rows are deleted from Supabase too.
+
 ## Gallery Albums
 
 Gallery & Files supports albums/folders. Uploads are saved into the selected album. Locked albums use a separate album password, so private folders can be opened only after unlocking them.

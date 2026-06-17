@@ -352,6 +352,18 @@
     );
   }
 
+  async function picksApi(action, body = {}, retry = true) {
+    return apiRequest(
+      `/api/picks?action=${encodeURIComponent(action)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, action })
+      },
+      retry
+    );
+  }
+
   function dataUrlToText(url) {
     const match = String(url || '').match(/^data:([^,]*),(.*)$/);
     if (!match) return '';
@@ -594,6 +606,7 @@
         signal: row.signal,
         scanner: row.scanner,
         mode: row.mode,
+        origin: row.scanner || 'tomorrow_picks',
         updated_at: row.updated_at
       })
     );
@@ -776,6 +789,7 @@
     return (
       origin.includes('nse sentinel') ||
       origin.includes('odysseus/nse') ||
+      origin.includes('tomorrow_picks') ||
       id.startsWith('nse-') ||
       id.startsWith('odysseus-ai-') ||
       (source === 'AI' && !origin)
@@ -896,7 +910,10 @@
             return `<div class="list-item event-item">
               <span class="icon">CA</span>
               <div><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.time || 'All day')}</span></div>
-              <button type="button" class="finish-button" data-event-finish="${escapeHtml(event.id)}">Finish</button>
+              <div class="item-actions">
+                <button type="button" class="finish-button" data-event-finish="${escapeHtml(event.id)}">Finish</button>
+                <button type="button" class="remove-button" data-event-delete="${escapeHtml(event.id)}">Remove</button>
+              </div>
             </div>`;
           })
           .join('')
@@ -928,11 +945,14 @@
       ? state.tasks
           .slice(0, 8)
           .map((task) => {
-            return `<button type="button" class="task-item ${task.done ? 'done' : ''}" data-task="${escapeHtml(task.id)}">
-              <span class="icon">OK</span>
-              <span>${escapeHtml(task.text)}</span>
-              <small>${escapeHtml(task.priority || 'Normal')}</small>
-            </button>`;
+            return `<div class="task-item ${task.done ? 'done' : ''}">
+              <button type="button" class="task-toggle" data-task="${escapeHtml(task.id)}">
+                <span class="icon">OK</span>
+                <span>${escapeHtml(task.text)}</span>
+                <small>${escapeHtml(task.priority || 'Normal')}</small>
+              </button>
+              <button type="button" class="remove-button" data-task-delete="${escapeHtml(task.id)}">Remove</button>
+            </div>`;
           })
           .join('')
       : '<p class="empty">No todo</p>';
@@ -942,7 +962,10 @@
           .slice(0, 6)
           .map((note) => {
             return `<div class="note-card">
-              <strong>${escapeHtml(note.title || 'Untitled note')}</strong>
+              <div class="card-title-row">
+                <strong>${escapeHtml(note.title || 'Untitled note')}</strong>
+                <button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>
+              </div>
               <p>${escapeHtml(note.body || '')}</p>
             </div>`;
           })
@@ -998,7 +1021,10 @@
               <dl>${rows || '<dt>Status</dt><dd>Waiting for detail sync</dd>'}</dl>
               ${pick.notes ? `<small class="pick-notes">${escapeHtml(pick.notes)}</small>` : ''}
               ${pick.warnings ? `<small class="pick-warning">${escapeHtml(pick.warnings)}</small>` : ''}
-              ${pick.chartUrl ? `<div class="pick-actions"><a class="pick-link" href="${escapeHtml(pick.chartUrl)}" target="_blank" rel="noreferrer">Open chart</a></div>` : ''}
+              <div class="pick-actions">
+                ${pick.chartUrl ? `<a class="pick-link" href="${escapeHtml(pick.chartUrl)}" target="_blank" rel="noreferrer">Open chart</a>` : ''}
+                <button type="button" class="remove-button" data-pick-delete="${escapeHtml(pick.id)}">Remove</button>
+              </div>
             </div>`;
           })
           .join('')
@@ -1034,7 +1060,12 @@
       .map((habit) => {
         const done = Object.values(habit.checks || {}).filter(Boolean).length;
         return `<div class="habit-row">
-          <div class="habit-name"><i style="background:${escapeHtml(habit.color || '#8b5cf6')}"></i><span>${escapeHtml(habit.name)}</span><small>${done}/30</small></div>
+          <div class="habit-name">
+            <i style="background:${escapeHtml(habit.color || '#8b5cf6')}"></i>
+            <span>${escapeHtml(habit.name)}</span>
+            <small>${done}/30</small>
+            <button type="button" class="remove-button" data-habit-delete="${escapeHtml(habit.id)}">Remove</button>
+          </div>
           ${days
             .map((day) => `<button type="button" class="${habit.checks && habit.checks[day] ? 'checked' : ''}" data-habit="${escapeHtml(habit.id)}" data-habit-day="${day}" aria-label="${escapeHtml(habit.name)} ${day}"></button>`)
             .join('')}
@@ -1114,7 +1145,10 @@
     return `<article class="panel gallery-panel">
       <header class="panel-header">
         <div><p class="eyebrow">Gallery &amp; Files</p><h2>${escapeHtml(album.name)} - ${visibleFiles.length} files</h2><p>${formatBytes(totalSize)}</p></div>
-        <label class="file-button ${locked ? 'disabled' : ''}">Upload<input id="file-input" type="file" multiple ${locked ? 'disabled' : ''} /></label>
+        <div class="button-row">
+          ${album.id !== DEFAULT_ALBUM_ID && !locked ? `<button type="button" class="remove-button" data-album-delete="${escapeHtml(album.id)}">Remove album</button>` : ''}
+          <label class="file-button ${locked ? 'disabled' : ''}">Upload<input id="file-input" type="file" multiple ${locked ? 'disabled' : ''} /></label>
+        </div>
       </header>
       <div class="album-form">
         <input id="album-name" placeholder="New album/folder name" />
@@ -1370,6 +1404,10 @@
       button.addEventListener('click', () => finishEvent(button.dataset.eventFinish));
     });
 
+    document.querySelectorAll('[data-event-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteEvent(button.dataset.eventDelete));
+    });
+
     byId('add-event')?.addEventListener('click', addEvent);
     byId('add-task')?.addEventListener('click', addTask);
     byId('add-note')?.addEventListener('click', addNote);
@@ -1381,6 +1419,14 @@
       button.addEventListener('click', () => toggleTask(button.dataset.task));
     });
 
+    document.querySelectorAll('[data-task-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteTask(button.dataset.taskDelete));
+    });
+
+    document.querySelectorAll('[data-note-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteNote(button.dataset.noteDelete));
+    });
+
     document.querySelectorAll('[data-pick-filter]').forEach((button) => {
       button.addEventListener('click', () => {
         ui.pickFilter = button.dataset.pickFilter;
@@ -1390,6 +1436,10 @@
 
     byId('add-pick')?.addEventListener('click', addPick);
     byId('sync-picks')?.addEventListener('click', syncPicks);
+    document.querySelectorAll('[data-pick-delete]').forEach((button) => {
+      button.addEventListener('click', () => deletePick(button.dataset.pickDelete));
+    });
+
     byId('add-habit')?.addEventListener('click', addHabit);
     byId('habit-name')?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') addHabit();
@@ -1397,6 +1447,10 @@
 
     document.querySelectorAll('[data-habit]').forEach((button) => {
       button.addEventListener('click', () => toggleHabit(button.dataset.habit, button.dataset.habitDay));
+    });
+
+    document.querySelectorAll('[data-habit-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteHabit(button.dataset.habitDelete));
     });
 
     document.querySelectorAll('[data-file-open]').forEach((button) => {
@@ -1413,6 +1467,10 @@
 
     document.querySelectorAll('[data-album-select]').forEach((button) => {
       button.addEventListener('click', () => selectAlbum(button.dataset.albumSelect));
+    });
+
+    document.querySelectorAll('[data-album-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteAlbum(button.dataset.albumDelete));
     });
 
     byId('add-album')?.addEventListener('click', addAlbum);
@@ -1491,6 +1549,10 @@
     }));
   }
 
+  function confirmDelete(label) {
+    return window.confirm(`Remove ${label}? This cannot be undone.`);
+  }
+
   function toggleTask(id) {
     mutate((current) => ({
       ...current,
@@ -1504,6 +1566,24 @@
           : task
       )
     }));
+  }
+
+  function deleteTask(id) {
+    if (!id || !confirmDelete('this task')) return;
+    mutate((current) => ({
+      ...current,
+      tasks: current.tasks.filter((task) => task.id !== id)
+    }));
+    setNotice('Task removed.');
+  }
+
+  function deleteNote(id) {
+    if (!id || !confirmDelete('this note')) return;
+    mutate((current) => ({
+      ...current,
+      notes: current.notes.filter((note) => note.id !== id)
+    }));
+    setNotice('Note removed.');
   }
 
   function finishEvent(id) {
@@ -1520,6 +1600,15 @@
           : event
       )
     }));
+  }
+
+  function deleteEvent(id) {
+    if (!id || !confirmDelete('this calendar item')) return;
+    mutate((current) => ({
+      ...current,
+      events: current.events.filter((event) => event.id !== id)
+    }));
+    setNotice('Calendar item removed.');
   }
 
   function addEvent() {
@@ -1559,6 +1648,30 @@
       ...current,
       picks: [pick, ...current.picks]
     }));
+  }
+
+  async function deletePick(id) {
+    const pick = state.picks.find((item) => item.id === id);
+    if (!pick || !confirmDelete(`${pick.symbol || 'this stock pick'}`)) return;
+
+    if (isSyncedStockPick(pick)) {
+      try {
+        await picksApi('delete', {
+          id: pick.id,
+          symbol: pick.symbol,
+          source: String(pick.source || '').toLowerCase()
+        });
+      } catch (error) {
+        setNotice(error.message || 'Could not remove stock pick from database.');
+        return;
+      }
+    }
+
+    mutate((current) => ({
+      ...current,
+      picks: current.picks.filter((item) => item.id !== id)
+    }));
+    setNotice('Stock pick removed.');
   }
 
   async function syncPicks() {
@@ -1630,6 +1743,16 @@
     }));
   }
 
+  function deleteHabit(id) {
+    if (!id || !confirmDelete('this growth habit')) return;
+    mutate((current) => ({
+      ...current,
+      habits: current.habits.filter((habit) => habit.id !== id),
+      growthStartDate: inferGrowthStartDate(current.habits.filter((habit) => habit.id !== id)) || current.growthStartDate
+    }));
+    setNotice('Growth habit removed.');
+  }
+
   function selectAlbum(id) {
     if (!id) return;
     ui.selectedAlbumId = id;
@@ -1684,6 +1807,32 @@
       ui.albumError = error.message || 'Could not unlock album.';
       render();
     }
+  }
+
+  async function deleteAlbum(id) {
+    const album = (state.albums || []).find((item) => item.id === id);
+    if (!album || album.id === DEFAULT_ALBUM_ID) return;
+    if (!confirmDelete(`album "${album.name}" and all files inside it`)) return;
+
+    const files = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === album.id);
+    try {
+      for (const file of files) {
+        await removeStoredFile(file);
+      }
+    } catch (error) {
+      setNotice(error.message || 'Could not remove every cloud file in this album.');
+      return;
+    }
+
+    if (files.some((file) => file.id === ui.activeFileId)) closeFile();
+    ui.selectedAlbumId = DEFAULT_ALBUM_ID;
+
+    mutate((current) => ({
+      ...current,
+      albums: current.albums.filter((item) => item.id !== id),
+      photos: current.photos.filter((file) => (file.albumId || DEFAULT_ALBUM_ID) !== id)
+    }));
+    setNotice('Album and its files removed.');
   }
 
   async function addFiles(event) {
@@ -1851,6 +2000,14 @@
     return response.blob();
   }
 
+  async function removeStoredFile(file) {
+    if (!file?.storagePath) return;
+    await fileApi('delete', {
+      bucket: file.storageBucket || FILE_BUCKET,
+      path: file.storagePath
+    });
+  }
+
   async function downloadFile(id) {
     const file = (state.photos || []).find((item) => item.id === id);
     if (!file) return;
@@ -1883,17 +2040,13 @@
   async function deleteFile(id) {
     const file = (state.photos || []).find((item) => item.id === id);
     if (!file) return;
+    if (!confirmDelete(file.name || 'this file')) return;
 
-    if (file.storagePath) {
-      try {
-        await fileApi('delete', {
-          bucket: file.storageBucket || FILE_BUCKET,
-          path: file.storagePath
-        });
-      } catch (error) {
-        setNotice(error.message || 'Could not remove cloud file.');
-        return;
-      }
+    try {
+      await removeStoredFile(file);
+    } catch (error) {
+      setNotice(error.message || 'Could not remove cloud file.');
+      return;
     }
 
     if (ui.activeFileId === id) closeFile();
@@ -1902,6 +2055,7 @@
       ...current,
       photos: current.photos.filter((item) => item.id !== id)
     }));
+    setNotice('File removed.');
   }
 
   function exportJson() {

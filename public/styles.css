@@ -473,7 +473,9 @@ h3 {
 
 .task-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
   text-align: left;
   margin-bottom: 8px;
 }
@@ -481,6 +483,23 @@ h3 {
 .task-item.done {
   color: rgba(154, 167, 189, 0.72);
   text-decoration: line-through;
+}
+
+.task-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-content: stretch;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.task-toggle:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .task-item svg {
@@ -496,9 +515,18 @@ h3 {
   margin-bottom: 8px;
 }
 
+.card-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
 .note-card strong,
 .list-item strong {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-card p,
@@ -517,6 +545,13 @@ h3 {
 
 .event-item {
   grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .finish-button {
@@ -575,7 +610,7 @@ h3 {
   padding: 14px;
 }
 
-.pick-card > div {
+.pick-card > div:first-child {
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -637,10 +672,13 @@ h3 {
 
 .pick-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: flex-end;
 }
 
-.pick-link {
+.pick-link,
+.remove-button {
   display: inline-grid;
   min-height: 34px;
   padding: 0 12px;
@@ -660,6 +698,17 @@ h3 {
   background: rgba(73, 215, 233, 0.14);
 }
 
+.remove-button {
+  color: #ffd5dd;
+  border-color: rgba(255, 92, 122, 0.34);
+  background: rgba(255, 92, 122, 0.08);
+}
+
+.remove-button:hover {
+  border-color: rgba(255, 92, 122, 0.66);
+  background: rgba(255, 92, 122, 0.15);
+}
+
 .habit-form {
   grid-template-columns: 1fr auto;
   margin-bottom: 16px;
@@ -673,9 +722,9 @@ h3 {
 .habit-days,
 .habit-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(30, 28px);
+  grid-template-columns: minmax(240px, 1fr) repeat(30, 28px);
   gap: 8px;
-  min-width: 1060px;
+  min-width: 1120px;
 }
 
 .habit-days {
@@ -699,9 +748,15 @@ h3 {
 
 .habit-name {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+}
+
+.habit-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .habit-name i {
@@ -714,7 +769,7 @@ h3 {
   color: var(--muted);
 }
 
-.habit-row button {
+.habit-row > button {
   width: 28px;
   height: 28px;
   min-height: 28px;
@@ -722,7 +777,7 @@ h3 {
   border-radius: 7px;
 }
 
-.habit-row button.checked {
+.habit-row > button.checked {
   border-color: rgba(99, 210, 151, 0.68);
   background:
     linear-gradient(135deg, rgba(99, 210, 151, 0.94), rgba(73, 215, 233, 0.74));

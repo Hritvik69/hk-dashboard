@@ -963,12 +963,43 @@ const notesHtml = state.notes.length
           .slice(0, 6)
           .map((note) => {
             const isEditing = ui.editingNoteId === note.id;
+            const codeBlocks = Array.isArray(note.codeBlocks) ? note.codeBlocks : [];
             const titleField = isEditing
               ? `<input class="note-title-input" data-note-title-input="${escapeHtml(note.id)}" value="${escapeHtml(note.title || '')}" placeholder="Title" />`
               : `<strong>${escapeHtml(note.title || 'Untitled note')}</strong>`;
             const bodyField = isEditing
-              ? `<textarea data-note-body-input="${escapeHtml(note.id)}" placeholder="Write your note...">${escapeHtml(note.body || '')}</textarea>`
+              ? `<textarea wrap="soft" data-note-body-input="${escapeHtml(note.id)}" placeholder="Write your note...">${escapeHtml(note.body || '')}</textarea>`
               : `<p class="note-body">${escapeHtml(note.body || '')}</p>`;
+            const codeBlocksHtml = codeBlocks.length
+              ? codeBlocks
+                  .map((block, blockIndex) => {
+                    const blockId = `${escapeHtml(note.id)}-${blockIndex}`;
+                    const lang = String(block?.lang || 'text').trim() || 'text';
+                    const content = String(block?.content || '');
+                    if (isEditing) {
+                      return `<div class="note-code-block-editor" data-code-block="${blockId}">
+                        <div class="code-lang-row">
+                          <input data-note-code-lang="${blockId}" value="${escapeHtml(lang)}" placeholder="language (js, py, sql…)" maxlength="24" />
+                          <button type="button" class="remove-button" data-note-code-remove="${blockId}">Remove</button>
+                        </div>
+                        <textarea wrap="soft" data-note-code-input="${blockId}" placeholder="Paste your code here…">${escapeHtml(content)}</textarea>
+                      </div>`;
+                    }
+                    return `<div class="note-code-block">
+                      <div class="note-code-block-header">
+                        <span class="lang-label">${escapeHtml(lang)}</span>
+                        <button type="button" class="copy-button" data-note-copy-code="${blockId}">Copy</button>
+                      </div>
+                      <pre data-note-code-content="${blockId}">${escapeHtml(content)}</pre>
+                    </div>`;
+                  })
+                  .join('')
+              : '';
+            const addCodeRow = isEditing
+              ? `<div class="note-code-add-row">
+                  <button type="button" class="add-code-button" data-note-code-add="${escapeHtml(note.id)}">+ Add code</button>
+                </div>`
+              : '';
             const editControls = isEditing
               ? `<div class="note-edit-actions">
                   <button type="button" class="remove-button" data-note-cancel="${escapeHtml(note.id)}">Cancel</button>
@@ -981,6 +1012,8 @@ const notesHtml = state.notes.length
                 ${isEditing ? '' : `<button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>`}
               </div>
               ${bodyField}
+              ${codeBlocksHtml}
+              ${addCodeRow}
               <div class="note-edit-actions">${editControls}</div>
             </div>`;
           })
@@ -1461,6 +1494,22 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
       button.addEventListener('click', () => saveNoteEdit(button.dataset.noteSave));
     });
 
+    document.querySelectorAll('[data-note-code-add]').forEach((button) => {
+      button.addEventListener('click', () => addCodeBlockToNote(button.dataset.noteCodeAdd));
+    });
+
+    document.querySelectorAll('[data-note-code-remove]').forEach((button) => {
+      button.addEventListener('click', () => removeCodeBlockFromEditingNote(button.dataset.noteCodeRemove));
+    });
+
+    document.querySelectorAll('[data-note-copy-code]').forEach((button) => {
+      button.addEventListener('click', (event) => copyCodeBlock(event.currentTarget));
+    });
+
+    document.querySelectorAll('[data-note-body-input]').forEach((textarea) => {
+      textarea.addEventListener('paste', normalizeNotePaste);
+    });
+
     document.querySelectorAll('[data-pick-filter]').forEach((button) => {
       button.addEventListener('click', () => {
         ui.pickFilter = button.dataset.pickFilter;
@@ -1648,6 +1697,7 @@ function deleteTask(id) {
       setNotice('Note body cannot be empty.');
       return;
     }
+    const codeBlocks = collectCodeBlocksFromEditing(id);
     ui.editingNoteId = '';
     mutate((current) => ({
       ...current,
@@ -1657,12 +1707,133 @@ function deleteTask(id) {
               ...note,
               title: newTitle || newBody.split('\n')[0].slice(0, 60),
               body: newBody,
+              codeBlocks,
               updatedAt: new Date().toISOString()
             }
           : note
       )
     }));
     setNotice('Note updated.');
+  }
+
+  function collectCodeBlocksFromEditing(noteId) {
+    const blocks = [];
+    document.querySelectorAll(`[data-code-block^="${noteId}-"]`).forEach((wrapper) => {
+      const blockId = wrapper.getAttribute('data-code-block');
+      const langInput = document.querySelector(`[data-note-code-lang="${blockId}"]`);
+      const contentInput = document.querySelector(`[data-note-code-input="${blockId}"]`);
+      const lang = String(langInput?.value || '').trim() || 'text';
+      const content = String(contentInput?.value || '').replace(/\r\n?/g, '\n');
+      blocks.push({ lang, content });
+    });
+    return blocks;
+  }
+
+  function addCodeBlockToNote(noteId) {
+    if (!noteId) return;
+    const existing = (state.notes || []).find((note) => note.id === noteId);
+    if (!existing) return;
+    mutate((current) => ({
+      ...current,
+      notes: current.notes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              codeBlocks: [
+                ...(Array.isArray(note.codeBlocks) ? note.codeBlocks : []),
+                { lang: 'text', content: '' }
+              ]
+            }
+          : note
+      )
+    }));
+    if (ui.editingNoteId !== noteId) ui.editingNoteId = noteId;
+    render();
+    setTimeout(() => {
+      const last = document.querySelectorAll(`[data-code-block^="${noteId}-"]`);
+      const wrapper = last[last.length - 1];
+      const ta = wrapper?.querySelector('textarea[data-note-code-input]');
+      if (ta) ta.focus();
+    }, 0);
+  }
+
+  function removeCodeBlockFromEditingNote(blockId) {
+    if (!blockId) return;
+    const dashIndex = blockId.lastIndexOf('-');
+    if (dashIndex < 0) return;
+    const noteId = blockId.slice(0, dashIndex);
+    const index = Number(blockId.slice(dashIndex + 1));
+    if (!Number.isFinite(index)) return;
+    mutate((current) => ({
+      ...current,
+      notes: current.notes.map((note) => {
+        if (note.id !== noteId) return note;
+        const next = (Array.isArray(note.codeBlocks) ? note.codeBlocks : []).slice();
+        next.splice(index, 1);
+        return { ...note, codeBlocks: next };
+      })
+    }));
+  }
+
+  async function copyCodeBlock(button) {
+    const blockId = button.getAttribute('data-note-copy-code');
+    if (!blockId) return;
+    const pre = document.querySelector(`[data-note-code-content="${blockId}"]`);
+    const text = pre ? pre.textContent || '' : '';
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } else {
+        const fallback = document.createElement('textarea');
+        fallback.value = text;
+        fallback.setAttribute('readonly', '');
+        fallback.style.position = 'fixed';
+        fallback.style.opacity = '0';
+        document.body.appendChild(fallback);
+        fallback.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(fallback);
+      }
+    } catch {
+      copied = false;
+    }
+    const original = button.textContent;
+    button.textContent = copied ? 'Copied' : 'Failed';
+    button.classList.toggle('copied', copied);
+    setTimeout(() => {
+      button.textContent = original;
+      button.classList.remove('copied');
+    }, 1500);
+  }
+
+  function normalizeNotePaste(event) {
+    if (!event.clipboardData) return;
+    const text = event.clipboardData.getData('text/plain');
+    if (!text) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? target.value.length;
+    const cleaned = text.replace(/\r\n?/g, '\n').replace(/\u00A0/g, ' ');
+    const before = target.value.slice(0, start);
+    const after = target.value.slice(end);
+    const insertAtEnd = start === target.value.length;
+    let nextValue;
+    let caret;
+    if (insertAtEnd) {
+      const needsLeadingBreak = before.length && !before.endsWith('\n');
+      const prefix = needsLeadingBreak ? '\n' : '';
+      nextValue = before + prefix + cleaned;
+      caret = nextValue.length;
+    } else {
+      nextValue = before + cleaned + after;
+      caret = before.length + cleaned.length;
+    }
+    target.value = nextValue;
+    target.setSelectionRange(caret, caret);
+    target.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function finishEvent(id) {

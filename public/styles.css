@@ -70,6 +70,18 @@ select {
 textarea {
   resize: vertical;
   min-height: 110px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+textarea[data-note-body-input] {
+  width: 100%;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  overflow-x: auto;
 }
 
 input:focus,
@@ -594,6 +606,142 @@ h3 {
 
 .note-card .edit-button:hover {
   border-color: rgba(73, 215, 233, 0.62);
+  background: rgba(73, 215, 233, 0.14);
+}
+
+.note-code-block {
+  position: relative;
+  margin-top: 10px;
+  border: 1px solid rgba(73, 215, 233, 0.22);
+  border-radius: 8px;
+  background: rgba(3, 7, 18, 0.78);
+  overflow: hidden;
+}
+
+.note-code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(73, 215, 233, 0.08);
+  border-bottom: 1px solid rgba(73, 215, 233, 0.18);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+
+.note-code-block-header .lang-label {
+  letter-spacing: 0.04em;
+}
+
+.note-code-block-header .copy-button {
+  min-height: 28px;
+  padding: 0 10px;
+  color: var(--cyan);
+  border: 1px solid rgba(73, 215, 233, 0.34);
+  border-radius: 6px;
+  background: rgba(73, 215, 233, 0.08);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.note-code-block-header .copy-button:hover {
+  border-color: rgba(73, 215, 233, 0.7);
+  background: rgba(73, 215, 233, 0.18);
+}
+
+.note-code-block-header .copy-button.copied {
+  color: #ffffff;
+  border-color: rgba(99, 210, 151, 0.7);
+  background: rgba(99, 210, 151, 0.22);
+}
+
+.note-code-block pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+  word-break: normal;
+  color: #eaf2ff;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 360px;
+}
+
+.note-code-block-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed rgba(73, 215, 233, 0.32);
+  border-radius: 8px;
+  background: rgba(7, 11, 22, 0.42);
+}
+
+.note-code-block-editor .code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.note-code-block-editor .code-lang-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.note-code-block-editor .code-lang-row input {
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.note-code-block-editor textarea {
+  min-height: 110px;
+  white-space: pre;
+  overflow-x: auto;
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.note-code-add-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.note-code-add-row .add-code-button {
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--cyan);
+  border: 1px dashed rgba(73, 215, 233, 0.42);
+  border-radius: 7px;
+  background: rgba(73, 215, 233, 0.06);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.note-code-add-row .add-code-button:hover {
+  border-style: solid;
+  border-color: rgba(73, 215, 233, 0.7);
   background: rgba(73, 215, 233, 0.14);
 }
 

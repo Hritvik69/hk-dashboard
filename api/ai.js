@@ -212,7 +212,7 @@ function parseLocalAction(message) {
     return emptyAction({ action: 'list_links', success_message: 'Quick links listed.' });
   }
 
-  let match = text.match(/^(?:check|tick)\s*(\d+)\s*box(?:es)?(?:\s*at)?\s*(?:for\s+)?(.+)$/i);
+  match = text.match(/^(?:check|tick)\s*(\d+)\s*box(?:es)?(?:\s*at)?\s*(?:for\s+)?(.+)$/i);
   if (match) {
     return emptyAction({
       action: 'check_habit',

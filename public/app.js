@@ -381,6 +381,90 @@ const ui = {
     return path;
   }
 
+  function parseClientAiAction(message) {
+    const text = String(message || '').trim();
+    if (!text) return null;
+    const lower = text.toLowerCase();
+    let match;
+
+    if (/^(hi|hello|hey|yo|hola|good morning|good evening|good afternoon)\b/i.test(lower)) {
+      return {
+        action: 'chat',
+        content: 'Hi! I can open links, add tasks/notes/habits, and manage your dashboard. Try "open YouTube", "add task buy milk", or "list links".'
+      };
+    }
+
+    if (/^(list|show)\s+(my\s+)?notes?$/i.test(text) || /^what notes/i.test(lower)) {
+      return { action: 'list_notes' };
+    }
+    if (/^(list|show)\s+(my\s+)?tasks?$/i.test(text) || /^what tasks/i.test(lower)) {
+      return { action: 'list_tasks' };
+    }
+    if (/^(list|show)\s+(my\s+)?habits?$/i.test(text) || /^what habits/i.test(lower)) {
+      return { action: 'list_habits' };
+    }
+    if (/^(list|show)\s+(my\s+)?events?$/i.test(text) || /^what events/i.test(lower)) {
+      return { action: 'list_events' };
+    }
+    if (/^(list|show)\s+(my\s+)?picks?$/i.test(text) || /^what picks/i.test(lower)) {
+      return { action: 'list_picks' };
+    }
+    if (/what do i have|dashboard summary|list dashboard/i.test(lower)) {
+      return { action: 'list_dashboard' };
+    }
+    if (/^list\s+links?$/i.test(text) || /^what (?:sites|links) can i open/i.test(lower)) {
+      return { action: 'list_links' };
+    }
+
+    match = text.match(/^(?:open|launch|go to|visit)\s+(?:my\s+)?(.+)$/i);
+    if (match) return { action: 'open_link', title: match[1].trim() };
+
+    match = text.match(/^(?:check|tick)\s*(\d+)\s*box(?:es)?(?:\s*at)?\s*(?:for\s+)?(.+)$/i);
+    if (match) return { action: 'check_habit', title: match[2].trim(), count: Number(match[1]) };
+
+    match = text.match(/^add\s+(?:a\s+)?habit\s+(?:called\s+)?(.+?)(?:\s+and\s+(?:tick|check)\s*(\d+)\s*box(?:es)?)?$/i);
+    if (match) {
+      return {
+        action: 'create_habit',
+        title: match[1].trim(),
+        count: match[2] ? Number(match[2]) : null
+      };
+    }
+
+    match = text.match(/^add\s+(?:a\s+)?task\s*:?\s*(.+)$/i) || text.match(/^(?:remind me to|i have to)\s+(.+)$/i);
+    if (match) return { action: 'create_task', title: match[1].trim() };
+
+    match = text.match(/^tomorrow\s+(.+)$/i);
+    if (match) return { action: 'create_task', title: match[1].trim(), date: 'tomorrow' };
+
+    match = text.match(/^add\s+(?:a\s+)?(?:note|that)\s*:?\s*(.+)$/i) || text.match(/^(?:remember|don't forget)\s*:?\s*(.+)$/i);
+    if (match) return { action: 'create_note', content: match[1].trim() };
+
+    match = text.match(/^mark\s+(.+?)\s+done$/i);
+    if (match) return { action: 'complete_task', title: match[1].trim() };
+
+    return null;
+  }
+
+  async function aiApiRequest(body) {
+    const response = await fetch(`${window.location.origin}/api/ai`, {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body)
+    });
+    const raw = await response.text();
+    let payload = {};
+    try {
+      payload = raw ? JSON.parse(raw) : {};
+    } catch {
+      throw new Error('AI service is temporarily unavailable.');
+    }
+    if (!response.ok) {
+      throw new Error(payload.error || 'AI request failed.');
+    }
+    return payload;
+  }
+
   async function apiRequest(url, options = {}, retry = true) {
     const response = await fetch(apiUrl(url), {
       ...options,
@@ -2345,23 +2429,31 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     ui.aiLoading = true;
     refreshAiPanel();
 
+    const localAction = parseClientAiAction(message);
+    if (localAction) {
+      aiMessages.push({ role: 'assistant', text: executeAiAction(localAction) });
+      ui.aiLoading = false;
+      refreshAiPanel();
+      document.getElementById('hk-ai-input')?.focus({ preventScroll: true });
+      return;
+    }
+
     try {
-      const payload = await apiRequest('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          context: buildAiContext(),
-          history: aiMessages.slice(-10)
-        })
+      const payload = await aiApiRequest({
+        message,
+        context: buildAiContext(),
+        history: aiMessages.slice(-10)
       });
 
       const reply = executeAiAction(payload.result);
       aiMessages.push({ role: 'assistant', text: reply });
     } catch (error) {
+      const fallback = parseClientAiAction(message);
       aiMessages.push({
         role: 'assistant',
-        text: error.message || 'HK AI is unavailable right now.'
+        text: fallback
+          ? executeAiAction(fallback)
+          : 'I could not reach the AI service right now. Try a direct command like "open YouTube", "add task buy milk", or "list habits".'
       });
     } finally {
       ui.aiLoading = false;

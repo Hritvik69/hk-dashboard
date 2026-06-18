@@ -534,6 +534,69 @@ h3 {
   color: var(--muted);
 }
 
+.note-card .note-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+  max-width: 100%;
+}
+
+.note-card .note-edit-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.note-card .note-edit-form textarea {
+  min-height: 110px;
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: inherit;
+}
+
+.note-card .note-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.note-card .save-button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: #ffffff;
+  border-color: rgba(99, 210, 151, 0.46);
+  background: rgba(99, 210, 151, 0.16);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.note-card .save-button:hover {
+  border-color: rgba(99, 210, 151, 0.78);
+  background: rgba(99, 210, 151, 0.24);
+}
+
+.note-card .edit-button {
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--cyan);
+  border-color: rgba(73, 215, 233, 0.34);
+  background: rgba(73, 215, 233, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.note-card .edit-button:hover {
+  border-color: rgba(73, 215, 233, 0.62);
+  background: rgba(73, 215, 233, 0.14);
+}
+
 .list-item {
   display: grid;
   grid-template-columns: auto 1fr;

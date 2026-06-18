@@ -5,7 +5,7 @@
   const GATE_STORAGE = 'hk-dashboard-unlocked-v1';
   const DASHBOARD_PASSWORD_HASH = 'aea89001a424050979c7d8f5d8aee4609a8b8416a9828940a4aabca0f0809d20';
   const DEFAULT_ALBUM_ID = 'album-default';
-  const ALBUM_UNLOCK_STORAGE = 'hk-dashboard-album-unlocked-v1';
+  const ALBUM_UNLOCK_STORAGE = 'hk-dashboard-album-unlocked-v2';
   const ALBUM_PASSWORD_HASH = 'aaef22647a24721100b6e9d6c40d6cc603de3db95cd848b99fff75752f2ac64d';
   const DEFAULT_REMOTE_SITE_URL = 'https://hk-dashboard-omega.vercel.app';
   const SYNC_INTERVAL_MS = 20000;
@@ -23,7 +23,7 @@
   let syncText = 'Not synced yet';
   let notice = '';
   let state = mergeDashboard(readLocal());
-  const ui = {
+const ui = {
     monthCursor: new Date(),
     selectedDate: todayKey(1),
     pickFilter: 'All',
@@ -35,7 +35,8 @@
     activeFileError: '',
     selectedAlbumId: DEFAULT_ALBUM_ID,
     albumError: '',
-    gateError: ''
+    gateError: '',
+    editingNoteId: ''
   };
 
   const quickLinks = [
@@ -957,16 +958,30 @@
           .join('')
       : '<p class="empty">No todo</p>';
 
-    const notesHtml = state.notes.length
+const notesHtml = state.notes.length
       ? state.notes
           .slice(0, 6)
           .map((note) => {
-            return `<div class="note-card">
+            const isEditing = ui.editingNoteId === note.id;
+            const titleField = isEditing
+              ? `<input class="note-title-input" data-note-title-input="${escapeHtml(note.id)}" value="${escapeHtml(note.title || '')}" placeholder="Title" />`
+              : `<strong>${escapeHtml(note.title || 'Untitled note')}</strong>`;
+            const bodyField = isEditing
+              ? `<textarea data-note-body-input="${escapeHtml(note.id)}" placeholder="Write your note...">${escapeHtml(note.body || '')}</textarea>`
+              : `<p class="note-body">${escapeHtml(note.body || '')}</p>`;
+            const editControls = isEditing
+              ? `<div class="note-edit-actions">
+                  <button type="button" class="remove-button" data-note-cancel="${escapeHtml(note.id)}">Cancel</button>
+                  <button type="button" class="save-button" data-note-save="${escapeHtml(note.id)}">Save</button>
+                </div>`
+              : `<button type="button" class="edit-button" data-note-edit="${escapeHtml(note.id)}">Edit</button>`;
+            return `<div class="note-card ${isEditing ? 'editing' : ''}">
               <div class="card-title-row">
-                <strong>${escapeHtml(note.title || 'Untitled note')}</strong>
-                <button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>
+                ${titleField}
+                ${isEditing ? '' : `<button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>`}
               </div>
-              <p>${escapeHtml(note.body || '')}</p>
+              ${bodyField}
+              <div class="note-edit-actions">${editControls}</div>
             </div>`;
           })
           .join('')
@@ -1110,10 +1125,13 @@
     const locked = !isAlbumUnlocked(album);
     const files = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === album.id);
     const visibleFiles = locked ? [] : files;
-    const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
+const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) || 0), 0);
     const albumTabs = albums
       .map((item) => {
-        const count = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === item.id).length;
+        const isLockedTab = item.locked && !isAlbumUnlocked(item);
+        const count = isLockedTab
+          ? '•••'
+          : (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === item.id).length;
         const active = item.id === album.id ? 'active' : '';
         const lock = item.locked ? ' locked' : '';
         return `<button type="button" class="${active}${lock}" data-album-select="${escapeHtml(item.id)}">
@@ -1144,7 +1162,11 @@
 
     return `<article class="panel gallery-panel">
       <header class="panel-header">
-        <div><p class="eyebrow">Gallery &amp; Files</p><h2>${escapeHtml(album.name)} - ${visibleFiles.length} files</h2><p>${formatBytes(totalSize)}</p></div>
+        <div>
+          <p class="eyebrow">Gallery &amp; Files</p>
+          <h2>${escapeHtml(album.name)} - ${locked ? 'locked' : `${visibleFiles.length} files`}</h2>
+          <p>${locked ? 'Enter password to view files' : formatBytes(totalSize)}</p>
+        </div>
         <div class="button-row">
           ${album.id !== DEFAULT_ALBUM_ID && !locked ? `<button type="button" class="remove-button" data-album-delete="${escapeHtml(album.id)}">Remove album</button>` : ''}
           <label class="file-button ${locked ? 'disabled' : ''}">Upload<input id="file-input" type="file" multiple ${locked ? 'disabled' : ''} /></label>
@@ -1423,8 +1445,20 @@
       button.addEventListener('click', () => deleteTask(button.dataset.taskDelete));
     });
 
-    document.querySelectorAll('[data-note-delete]').forEach((button) => {
+document.querySelectorAll('[data-note-delete]').forEach((button) => {
       button.addEventListener('click', () => deleteNote(button.dataset.noteDelete));
+    });
+
+    document.querySelectorAll('[data-note-edit]').forEach((button) => {
+      button.addEventListener('click', () => startEditingNote(button.dataset.noteEdit));
+    });
+
+    document.querySelectorAll('[data-note-cancel]').forEach((button) => {
+      button.addEventListener('click', () => cancelEditingNote());
+    });
+
+    document.querySelectorAll('[data-note-save]').forEach((button) => {
+      button.addEventListener('click', () => saveNoteEdit(button.dataset.noteSave));
     });
 
     document.querySelectorAll('[data-pick-filter]').forEach((button) => {
@@ -1568,7 +1602,7 @@
     }));
   }
 
-  function deleteTask(id) {
+function deleteTask(id) {
     if (!id || !confirmDelete('this task')) return;
     mutate((current) => ({
       ...current,
@@ -1579,11 +1613,56 @@
 
   function deleteNote(id) {
     if (!id || !confirmDelete('this note')) return;
+    if (ui.editingNoteId === id) ui.editingNoteId = '';
     mutate((current) => ({
       ...current,
       notes: current.notes.filter((note) => note.id !== id)
     }));
     setNotice('Note removed.');
+  }
+
+  function startEditingNote(id) {
+    if (!id) return;
+    ui.editingNoteId = id;
+    render();
+    const textarea = document.querySelector(`[data-note-body-input="${id}"]`);
+    if (textarea) {
+      textarea.focus();
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+    }
+  }
+
+  function cancelEditingNote() {
+    ui.editingNoteId = '';
+    render();
+  }
+
+  function saveNoteEdit(id) {
+    if (!id) return;
+    const titleInput = document.querySelector(`[data-note-title-input="${id}"]`);
+    const bodyInput = document.querySelector(`[data-note-body-input="${id}"]`);
+    const newTitle = String(titleInput?.value || '').trim();
+    const newBody = String(bodyInput?.value || '').trim();
+    if (!newBody) {
+      setNotice('Note body cannot be empty.');
+      return;
+    }
+    ui.editingNoteId = '';
+    mutate((current) => ({
+      ...current,
+      notes: current.notes.map((note) =>
+        note.id === id
+          ? {
+              ...note,
+              title: newTitle || newBody.split('\n')[0].slice(0, 60),
+              body: newBody,
+              updatedAt: new Date().toISOString()
+            }
+          : note
+      )
+    }));
+    setNotice('Note updated.');
   }
 
   function finishEvent(id) {
@@ -1753,10 +1832,19 @@
     setNotice('Growth habit removed.');
   }
 
-  function selectAlbum(id) {
+function selectAlbum(id) {
     if (!id) return;
+    const target = (state.albums || []).find((item) => item.id === id);
     ui.selectedAlbumId = id;
     ui.albumError = '';
+    if (target && target.locked && !isAlbumUnlocked(target)) {
+      revokeActiveFileUrl();
+      ui.activeFileId = '';
+      ui.activeFileUrl = '';
+      ui.activeFileText = '';
+      ui.activeFileLoading = false;
+      ui.activeFileError = '';
+    }
     render();
   }
 
@@ -1768,11 +1856,6 @@
     const id = uid('album');
     ui.selectedAlbumId = id;
     ui.albumError = '';
-    if (locked) {
-      try {
-        sessionStorage.setItem(albumUnlockKey(id), 'yes');
-      } catch {}
-    }
 
     mutate((current) => ({
       ...current,
@@ -1835,12 +1918,12 @@
     setNotice('Album and its files removed.');
   }
 
-  async function addFiles(event) {
+async function addFiles(event) {
     const selected = Array.from((event.target.files || [])).filter(Boolean);
     event.target.value = '';
     if (!selected.length) return;
     const album = activeAlbum();
-    if (!isAlbumUnlocked(album)) {
+    if (!album || !isAlbumUnlocked(album)) {
       setNotice('Unlock this album before uploading files.');
       return;
     }
@@ -1952,6 +2035,12 @@
   async function openFile(id) {
     const file = (state.photos || []).find((item) => item.id === id);
     if (!file) return;
+    const fileAlbumId = file.albumId || DEFAULT_ALBUM_ID;
+    const fileAlbum = (state.albums || []).find((item) => item.id === fileAlbumId);
+    if (fileAlbum && fileAlbum.locked && !isAlbumUnlocked(fileAlbum)) {
+      setNotice('Unlock this album first to view its files.');
+      return;
+    }
 
     revokeActiveFileUrl();
     ui.activeFileId = id;

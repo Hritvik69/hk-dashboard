@@ -140,6 +140,8 @@ Examples:
 
 HK AI returns structured actions and updates your dashboard automatically.
 
+**Chat privacy:** AI conversations are temporary (session only). They are not saved to Supabase. Only notes, tasks, events, habits, picks, albums, and files that HK AI creates or removes are persisted through normal dashboard sync.
+
 ## Tomorrow's Picks
 
 Tomorrow's Picks can arrive two ways.

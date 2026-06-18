@@ -1587,6 +1587,14 @@ h3 {
   min-width: 72px;
 }
 
+.hk-ai-footnote {
+  margin: 0;
+  padding: 0 16px 14px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 @media (max-width: 640px) {
   .hk-ai-root {
     right: 14px;

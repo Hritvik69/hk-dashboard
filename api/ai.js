@@ -11,7 +11,7 @@ Never produce unnecessary long explanations when an action can be performed.
 
 Convert natural language into structured dashboard actions.
 
-Supported modules: Notes, Todo List, Calendar Events.
+Supported modules: Notes, Todo List, Calendar Events, Growth Habits (30-day), Tomorrow's Picks, Gallery Albums.
 
 If the request is informational, answer normally using action "chat".
 If the request requires creating, updating, or deleting data, return structured output.
@@ -21,6 +21,10 @@ If the request requires creating, updating, or deleting data, return structured 
 Notes: create_note, update_note, delete_note, list_notes
 Todo: create_task, update_task, complete_task, delete_task, list_tasks
 Calendar: create_event, update_event, delete_event, list_events
+Growth: create_habit, delete_habit, check_habit, uncheck_habit, list_habits
+Picks: create_pick, delete_pick, list_picks
+Gallery: create_album, delete_album, list_albums, list_files
+Summary: list_dashboard
 Clarification: clarification (when confidence is below 80%)
 Chat: chat (for informational questions only)
 
@@ -56,6 +60,13 @@ Unused fields must be null.
 "On 5 August..." / "My birthday..." → create_event
 "Delete my shopping note" → delete_note
 "Mark Physics homework done" → complete_task
+"Add habit Sattu" / "Track gym daily" → create_habit
+"Mark Sattu done today" → check_habit
+"Remove habit Sattu" → delete_habit
+"Add RELIANCE pick" → create_pick
+"Remove RELIANCE pick" → delete_pick
+"Create album Vacation" → create_album
+"What do I have?" → list_dashboard
 
 ## AUTO TITLES
 
@@ -85,7 +96,7 @@ Never invent facts. Use only the current request and provided dashboard context.
 ## FALLBACK
 
 If confidence is below 80%, return:
-{"action":"clarification","question":"Should I save this as a note, task, or calendar event?", ...other fields null}
+{"action":"clarification","question":"Should I save this as a note, task, event, habit, pick, or album?", ...other fields null}
 
 ## VALIDATION
 
@@ -229,7 +240,12 @@ function buildContextMessage(context) {
 Today: ${context.today || 'unknown'}
 Notes: ${JSON.stringify(context.notes || [])}
 Tasks: ${JSON.stringify(context.tasks || [])}
-Events: ${JSON.stringify(context.events || [])}`;
+Events: ${JSON.stringify(context.events || [])}
+Habits: ${JSON.stringify(context.habits || [])}
+Picks: ${JSON.stringify(context.picks || [])}
+Albums: ${JSON.stringify(context.albums || [])}
+Files: ${JSON.stringify(context.files || [])}
+Summary: ${JSON.stringify(context.summary || {})}`;
 }
 
 function buildMessages({ message, context, history = [] }) {

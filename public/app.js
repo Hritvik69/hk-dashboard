@@ -16,6 +16,8 @@
   let session = null;
   let saveTimer = null;
   let syncTimer = null;
+  let deferredRenderTimer = null;
+  let clockTimer = null;
   let realtimeChannel = null;
   let cloudBooted = false;
   let hasLoadedCloud = false;
@@ -41,10 +43,11 @@ const ui = {
     aiLoading: false
   };
 
+  // Session-only chat memory. Never saved to localStorage or Supabase.
   let aiMessages = [
     {
       role: 'assistant',
-      text: 'I am HK AI. Tell me to add a note, task, or calendar event — or ask me anything.'
+      text: 'I am HK AI. I can manage notes, tasks, calendar, growth habits, stock picks, and albums. Chats here are temporary — only dashboard changes are saved.'
     }
   ];
 
@@ -420,6 +423,150 @@ const ui = {
     render();
   }
 
+  function isEditableElement(el) {
+    if (!el || !(el instanceof Element)) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+  }
+
+  function userIsDrafting() {
+    return isEditableElement(document.activeElement);
+  }
+
+  function captureDraftState() {
+    const drafts = {};
+    [
+      'quick-text',
+      'note-text',
+      'hk-ai-input',
+      'event-title',
+      'event-date',
+      'event-time',
+      'pick-symbol',
+      'pick-bias',
+      'pick-entry',
+      'pick-target',
+      'habit-name',
+      'album-name',
+      'album-password',
+      'email'
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && 'value' in el) drafts[id] = el.value;
+    });
+
+    document.querySelectorAll('[data-note-body-input]').forEach((el) => {
+      drafts[`note-body:${el.dataset.noteBodyInput}`] = el.value;
+    });
+    document.querySelectorAll('[data-note-title-input]').forEach((el) => {
+      drafts[`note-title:${el.dataset.noteTitleInput}`] = el.value;
+    });
+    document.querySelectorAll('[data-note-code-lang]').forEach((el) => {
+      drafts[`note-code-lang:${el.dataset.noteCodeLang}`] = el.value;
+    });
+    document.querySelectorAll('[data-note-code-input]').forEach((el) => {
+      drafts[`note-code-input:${el.dataset.noteCodeInput}`] = el.value;
+    });
+
+    const active = document.activeElement;
+    let focus = null;
+    if (isEditableElement(active)) {
+      focus = {
+        id: active.id || '',
+        noteBody: active.dataset?.noteBodyInput || '',
+        noteTitle: active.dataset?.noteTitleInput || '',
+        noteCodeLang: active.dataset?.noteCodeLang || '',
+        noteCodeInput: active.dataset?.noteCodeInput || '',
+        start: active.selectionStart,
+        end: active.selectionEnd
+      };
+    }
+
+    return { drafts, focus };
+  }
+
+  function restoreDraftState(snapshot) {
+    if (!snapshot) return;
+
+    Object.entries(snapshot.drafts || {}).forEach(([key, value]) => {
+      if (!key.includes(':')) {
+        const el = document.getElementById(key);
+        if (el && 'value' in el) el.value = value;
+        return;
+      }
+
+      const [kind, id] = key.split(':');
+      const selectors = {
+        'note-body': `[data-note-body-input="${id}"]`,
+        'note-title': `[data-note-title-input="${id}"]`,
+        'note-code-lang': `[data-note-code-lang="${id}"]`,
+        'note-code-input': `[data-note-code-input="${id}"]`
+      };
+      const el = document.querySelector(selectors[kind] || '');
+      if (el && 'value' in el) el.value = value;
+    });
+
+    const focus = snapshot.focus;
+    if (!focus) return;
+
+    let el = null;
+    if (focus.id) el = document.getElementById(focus.id);
+    else if (focus.noteBody) el = document.querySelector(`[data-note-body-input="${focus.noteBody}"]`);
+    else if (focus.noteTitle) el = document.querySelector(`[data-note-title-input="${focus.noteTitle}"]`);
+    else if (focus.noteCodeLang) el = document.querySelector(`[data-note-code-lang="${focus.noteCodeLang}"]`);
+    else if (focus.noteCodeInput) el = document.querySelector(`[data-note-code-input="${focus.noteCodeInput}"]`);
+
+    if (!el) return;
+    el.focus();
+    if (typeof focus.start === 'number' && typeof focus.end === 'number' && el.setSelectionRange) {
+      try {
+        el.setSelectionRange(focus.start, focus.end);
+      } catch {
+        /* unsupported input types */
+      }
+    }
+  }
+
+  function dashboardFingerprint() {
+    return JSON.stringify({
+      notes: state.notes,
+      tasks: state.tasks,
+      events: state.events,
+      habits: state.habits,
+      picks: state.picks,
+      photos: state.photos,
+      albums: state.albums,
+      notice,
+      editingNoteId: ui.editingNoteId,
+      selectedDate: ui.selectedDate,
+      monthCursor: ui.monthCursor ? dateKey(ui.monthCursor) : '',
+      pickFilter: ui.pickFilter
+    });
+  }
+
+  function scheduleDeferredRender() {
+    clearTimeout(deferredRenderTimer);
+    deferredRenderTimer = setTimeout(() => {
+      if (userIsDrafting()) {
+        scheduleDeferredRender();
+        return;
+      }
+      render();
+    }, 1200);
+  }
+
+  function updateClockDisplay() {
+    const clock = document.querySelector('.clock-card span');
+    if (!clock) return;
+    clock.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function startClockTicker() {
+    if (clockTimer) return;
+    updateClockDisplay();
+    clockTimer = setInterval(updateClockDisplay, 30000);
+  }
+
   function authRedirectUrl() {
     const configured = String(config.SITE_URL || '').trim().replace(/\/+$/, '');
     return configured || window.location.origin;
@@ -542,6 +689,7 @@ const ui = {
 
   async function syncCloudNow(options = {}) {
     const { force = false, silent = false } = options;
+    const before = dashboardFingerprint();
 
     if (session) {
       await loadCloud({ force, silent: true });
@@ -551,11 +699,21 @@ const ui = {
     }
 
     markSynced(session ? 'Cloud synced' : 'Picks synced');
+    const after = dashboardFingerprint();
+
     if (!silent) {
       setNotice(session ? 'Latest cloud data synced.' : 'Latest stock picks synced.');
-    } else {
-      render();
+      return;
     }
+
+    if (before === after) return;
+
+    if (userIsDrafting()) {
+      scheduleDeferredRender();
+      return;
+    }
+
+    render();
   }
 
   async function loadCloud(options = {}) {
@@ -1502,7 +1660,39 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     );
   }
 
+  function findHabit(query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.habits.find((habit) => habit.id === query) ||
+      state.habits.find((habit) => String(habit.name || '').toLowerCase().includes(needle))
+    );
+  }
+
+  function findPick(query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.picks.find((pick) => pick.id === query) ||
+      state.picks.find((pick) => String(pick.symbol || '').toLowerCase().includes(needle))
+    );
+  }
+
+  function findAlbum(query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.albums.find((album) => album.id === query) ||
+      state.albums.find((album) => String(album.name || '').toLowerCase().includes(needle))
+    );
+  }
+
+  function habitProgress(habit) {
+    return Object.values(habit.checks || {}).filter(Boolean).length;
+  }
+
   function buildAiContext() {
+    const openTasks = state.tasks.filter((task) => !task.done).length;
     return {
       today: todayKey(),
       notes: state.notes.slice(0, 30).map((note) => ({
@@ -1512,14 +1702,53 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       tasks: state.tasks.slice(0, 30).map((task) => ({
         id: task.id,
         text: task.text,
-        done: Boolean(task.done)
+        done: Boolean(task.done),
+        dueDate: task.dueDate || '',
+        priority: task.priority || 'Normal'
       })),
       events: state.events.slice(0, 30).map((event) => ({
         id: event.id,
         title: event.title,
         date: event.date,
-        time: event.time || ''
-      }))
+        time: event.time || '',
+        done: Boolean(event.done)
+      })),
+      habits: state.habits.slice(0, 30).map((habit) => ({
+        id: habit.id,
+        name: habit.name,
+        progress: `${habitProgress(habit)}/30`,
+        startDate: habitStartKey(habit) || habit.startDate || ''
+      })),
+      picks: state.picks.slice(0, 30).map((pick) => ({
+        id: pick.id,
+        symbol: pick.symbol,
+        source: pick.source,
+        bias: pick.bias || '',
+        entry: pick.entry || '',
+        target: pick.target || ''
+      })),
+      albums: (state.albums || []).slice(0, 20).map((album) => ({
+        id: album.id,
+        name: album.name,
+        locked: Boolean(album.locked),
+        fileCount: (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === album.id).length
+      })),
+      files: (state.photos || []).slice(0, 20).map((file) => ({
+        id: file.id,
+        name: file.name,
+        albumId: file.albumId || DEFAULT_ALBUM_ID,
+        kind: fileKind(file)
+      })),
+      summary: {
+        notes: state.notes.length,
+        openTasks,
+        tasks: state.tasks.length,
+        events: state.events.length,
+        habits: state.habits.length,
+        picks: state.picks.length,
+        albums: (state.albums || []).length,
+        files: (state.photos || []).length
+      }
     };
   }
 
@@ -1745,6 +1974,181 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         .join('\n');
     }
 
+    if (action === 'create_habit') {
+      const names = splitAiLines(payload.title || payload.content);
+      const habitNames = names.length ? names : [String(payload.title || payload.content || '').trim()].filter(Boolean);
+      if (!habitNames.length) return 'Habit name is missing.';
+
+      mutate((current) => ({
+        ...current,
+        growthStartDate: current.growthStartDate || todayKey(),
+        habits: [
+          ...current.habits,
+          ...habitNames.map((name) => ({
+            id: uid('habit'),
+            name,
+            color: '#8b5cf6',
+            startDate: current.growthStartDate || todayKey(),
+            createdAt: new Date().toISOString(),
+            checks: {}
+          }))
+        ]
+      }));
+      return payload.success_message || (habitNames.length > 1 ? `${habitNames.length} habits added.` : 'Habit added.');
+    }
+
+    if (action === 'delete_habit') {
+      const habit = findHabit(payload.id || payload.title || payload.content);
+      if (!habit) return 'Could not find that habit.';
+      mutate((current) => ({
+        ...current,
+        habits: current.habits.filter((item) => item.id !== habit.id),
+        growthStartDate: inferGrowthStartDate(current.habits.filter((item) => item.id !== habit.id)) || current.growthStartDate
+      }));
+      return payload.success_message || 'Habit removed.';
+    }
+
+    if (action === 'check_habit' || action === 'uncheck_habit') {
+      const habit = findHabit(payload.id || payload.title || payload.content);
+      if (!habit) return 'Could not find that habit.';
+      const day = resolveAiDate(payload.date) || todayKey();
+      mutate((current) => ({
+        ...current,
+        habits: current.habits.map((item) => {
+          if (item.id !== habit.id) return item;
+          const checks = { ...(item.checks || {}) };
+          if (action === 'check_habit') checks[day] = true;
+          else delete checks[day];
+          return { ...item, startDate: habitStartKey(item) || day, checks };
+        })
+      }));
+      return payload.success_message || (action === 'check_habit' ? 'Habit marked done.' : 'Habit mark removed.');
+    }
+
+    if (action === 'list_habits') {
+      if (!state.habits.length) return 'You have no growth habits yet.';
+      return state.habits
+        .slice(0, 12)
+        .map((habit, index) => `${index + 1}. ${habit.name} (${habitProgress(habit)}/30)`)
+        .join('\n');
+    }
+
+    if (action === 'create_pick') {
+      const pick = normalizePick({
+        symbol: payload.title || payload.content,
+        source: payload.category || payload.source || 'Manual',
+        bias: payload.description || payload.bias || 'Watch',
+        entry: payload.entry || '',
+        target: payload.target || '',
+        stop: payload.stop || ''
+      });
+      if (!pick.symbol || pick.symbol === 'UNKNOWN') return 'Stock symbol is missing.';
+
+      mutate((current) => ({
+        ...current,
+        picks: [pick, ...current.picks]
+      }));
+      return payload.success_message || `${pick.symbol} pick added.`;
+    }
+
+    if (action === 'delete_pick') {
+      const pick = findPick(payload.id || payload.title || payload.content);
+      if (!pick) return 'Could not find that pick.';
+      if (isSyncedStockPick(pick)) {
+        picksApi('delete', {
+          id: pick.id,
+          symbol: pick.symbol,
+          source: String(pick.source || '').toLowerCase()
+        }).catch(() => {});
+      }
+      mutate((current) => ({
+        ...current,
+        picks: current.picks.filter((item) => item.id !== pick.id)
+      }));
+      return payload.success_message || 'Pick removed.';
+    }
+
+    if (action === 'list_picks') {
+      if (!state.picks.length) return 'You have no stock picks yet.';
+      return state.picks
+        .slice(0, 12)
+        .map((pick, index) => `${index + 1}. ${pick.symbol} (${pick.source}) — ${pick.bias || 'Watch'}`)
+        .join('\n');
+    }
+
+    if (action === 'create_album') {
+      const name = String(payload.title || payload.content || '').trim();
+      if (!name) return 'Album name is missing.';
+      const id = uid('album');
+      ui.selectedAlbumId = id;
+      mutate((current) => ({
+        ...current,
+        albums: [
+          ...(current.albums || []),
+          {
+            id,
+            name,
+            locked: false,
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }));
+      return payload.success_message || `Album "${name}" created.`;
+    }
+
+    if (action === 'delete_album') {
+      const album = findAlbum(payload.id || payload.title || payload.content);
+      if (!album) return 'Could not find that album.';
+      if (album.id === DEFAULT_ALBUM_ID) return 'The default album cannot be removed.';
+      mutate((current) => ({
+        ...current,
+        albums: (current.albums || []).filter((item) => item.id !== album.id),
+        photos: (current.photos || []).map((file) =>
+          (file.albumId || DEFAULT_ALBUM_ID) === album.id
+            ? { ...file, albumId: DEFAULT_ALBUM_ID }
+            : file
+        )
+      }));
+      if (ui.selectedAlbumId === album.id) ui.selectedAlbumId = DEFAULT_ALBUM_ID;
+      return payload.success_message || 'Album removed.';
+    }
+
+    if (action === 'list_albums') {
+      const albums = state.albums && state.albums.length ? state.albums : [defaultAlbum(state.updatedAt)];
+      return albums
+        .map((album, index) => {
+          const count = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === album.id).length;
+          return `${index + 1}. ${album.name}${album.locked ? ' (locked)' : ''} — ${count} file${count === 1 ? '' : 's'}`;
+        })
+        .join('\n');
+    }
+
+    if (action === 'list_files') {
+      const album = findAlbum(payload.title || payload.category || payload.id);
+      const files = (state.photos || []).filter((file) => {
+        if (!album) return true;
+        return (file.albumId || DEFAULT_ALBUM_ID) === album.id;
+      });
+      if (!files.length) return album ? `No files in ${album.name}.` : 'You have no files yet.';
+      return files
+        .slice(0, 12)
+        .map((file, index) => `${index + 1}. ${file.name || 'Untitled'} (${fileKind(file)})`)
+        .join('\n');
+    }
+
+    if (action === 'list_dashboard') {
+      const openTasks = state.tasks.filter((task) => !task.done).length;
+      return [
+        `Notes: ${state.notes.length}`,
+        `Open tasks: ${openTasks}`,
+        `Events: ${state.events.length}`,
+        `Habits: ${state.habits.length}`,
+        `Picks: ${state.picks.length}`,
+        `Albums: ${(state.albums || []).length}`,
+        `Files: ${(state.photos || []).length}`
+      ].join('\n');
+    }
+
     return payload.success_message || 'Action completed.';
   }
 
@@ -1777,9 +2181,10 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
           ${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}
         </div>
         <form class="hk-ai-compose" id="hk-ai-form">
-          <input id="hk-ai-input" placeholder="Add note, task, event, or ask anything..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
+          <input id="hk-ai-input" placeholder="Notes, tasks, habits, picks, albums..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
           <button type="submit" ${ui.aiLoading ? 'disabled' : ''}>Send</button>
         </form>
+        <p class="hk-ai-footnote">Chats are temporary. Only dashboard changes are saved.</p>
       </section>
     </div>`;
   }
@@ -1853,6 +2258,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       return;
     }
 
+    const drafts = captureDraftState();
     const now = new Date();
     const openTasks = state.tasks.filter((task) => !task.done);
     const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
@@ -1891,6 +2297,8 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
     bindEvents();
     bindAiEvents();
+    restoreDraftState(drafts);
+    startClockTicker();
   }
 
   function bindEvents() {

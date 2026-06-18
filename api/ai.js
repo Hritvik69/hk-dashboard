@@ -152,6 +152,174 @@ function readEnv(key) {
   return String(process.env[key] || '').trim();
 }
 
+function emptyAction(overrides = {}) {
+  return {
+    action: '',
+    title: null,
+    content: null,
+    description: null,
+    date: null,
+    time: null,
+    priority: null,
+    category: null,
+    status: null,
+    id: null,
+    success_message: null,
+    question: null,
+    count: null,
+    ...overrides
+  };
+}
+
+function parseLocalAction(message) {
+  const text = String(message || '').trim();
+  if (!text) return null;
+  const lower = text.toLowerCase();
+
+  if (/^(list|show)\s+(my\s+)?notes?$/i.test(text) || /^what notes/i.test(lower)) {
+    return emptyAction({ action: 'list_notes', success_message: 'Notes listed.' });
+  }
+  if (/^(list|show)\s+(my\s+)?tasks?$/i.test(text) || /^what tasks/i.test(lower)) {
+    return emptyAction({ action: 'list_tasks', success_message: 'Tasks listed.' });
+  }
+  if (/^(list|show)\s+(my\s+)?habits?$/i.test(text) || /^what habits/i.test(lower)) {
+    return emptyAction({ action: 'list_habits', success_message: 'Habits listed.' });
+  }
+  if (/^(list|show)\s+(my\s+)?events?$/i.test(text) || /^what events/i.test(lower)) {
+    return emptyAction({ action: 'list_events', success_message: 'Events listed.' });
+  }
+  if (/^(list|show)\s+(my\s+)?picks?$/i.test(text) || /^what picks/i.test(lower)) {
+    return emptyAction({ action: 'list_picks', success_message: 'Picks listed.' });
+  }
+  if (/what do i have|dashboard summary|list dashboard/i.test(lower)) {
+    return emptyAction({ action: 'list_dashboard', success_message: 'Dashboard summary ready.' });
+  }
+
+  let   match = text.match(/^(?:check|tick)\s*(\d+)\s*box(?:es)?(?:\s*at)?\s*(?:for\s+)?(.+)$/i);
+  if (match) {
+    return emptyAction({
+      action: 'check_habit',
+      title: match[2].trim(),
+      count: Number(match[1]),
+      success_message: `${match[1]} day(s) checked.`
+    });
+  }
+
+  match = text.match(/(?:check|tick)\s*box(?:es)?\s*at\s*(\d+)(?:\s+for\s+(.+))?$/i);
+  if (match) {
+    return emptyAction({
+      action: 'check_habit',
+      title: (match[2] || '').trim() || null,
+      count: Number(match[1]),
+      description: `box at ${match[1]}`,
+      success_message: `Box ${match[1]} checked.`
+    });
+  }
+
+  match = text.match(/habit\s+(?:called\s+)?([^,.]+?)(?:\s+and\s+(?:tick|check)\s*(\d+)\s*box(?:es)?)?/i);
+  if (match && /add\s+.*habit|30[- ]day|growth/i.test(lower)) {
+    return emptyAction({
+      action: 'create_habit',
+      title: match[1].trim(),
+      count: match[2] ? Number(match[2]) : null,
+      success_message: match[2] ? `Habit added with ${match[2]} boxes checked.` : 'Habit added.'
+    });
+  }
+
+  match = text.match(/^(?:mark|check|tick)\s+(.+?)\s+(?:done|complete|today)$/i);
+  if (match) {
+    const target = match[1].trim();
+    if (/habit/i.test(lower) || /sattu|gym|workout/i.test(target)) {
+      return emptyAction({ action: 'check_habit', title: target.replace(/habit/gi, '').trim(), date: 'today', success_message: 'Habit marked done.' });
+    }
+    return emptyAction({ action: 'complete_task', title: target, success_message: 'Task completed.' });
+  }
+
+  match = text.match(/^mark\s+(.+?)\s+done$/i);
+  if (match) {
+    return emptyAction({ action: 'complete_task', title: match[1].trim(), success_message: 'Task completed.' });
+  }
+
+  match = text.match(/^remove\s+(?:habit\s+)?(.+)$/i);
+  if (match && /habit/i.test(lower)) {
+    return emptyAction({ action: 'delete_habit', title: match[1].trim(), success_message: 'Habit removed.' });
+  }
+
+  match = text.match(/^add\s+(?:a\s+)?habit\s+(?:called\s+)?(.+?)(?:\s+and\s+(?:tick|check)\s*(\d+)\s*box(?:es)?)?$/i);
+  if (match) {
+    return emptyAction({
+      action: 'create_habit',
+      title: match[1].trim(),
+      count: match[2] ? Number(match[2]) : null,
+      success_message: match[2] ? `Habit added with ${match[2]} boxes checked.` : 'Habit added.'
+    });
+  }
+
+  match = text.match(/^add\s+(?:a\s+)?(?:note|that)\s*:?\s*(.+)$/i) || text.match(/^(?:remember|don't forget)\s*:?\s*(.+)$/i);
+  if (match) {
+    return emptyAction({
+      action: 'create_note',
+      content: match[1].trim(),
+      success_message: 'Note created.'
+    });
+  }
+
+  match = text.match(/^tomorrow\s+(.+)$/i);
+  if (match) {
+    return emptyAction({
+      action: 'create_task',
+      title: match[1].trim(),
+      date: 'tomorrow',
+      success_message: 'Task created.'
+    });
+  }
+
+  match = text.match(/^add\s+(?:a\s+)?task\s*:?\s*(.+)$/i) || text.match(/^(?:remind me to|i have to)\s+(.+)$/i);
+  if (match) {
+    return emptyAction({
+      action: 'create_task',
+      title: match[1].trim(),
+      success_message: 'Task created.'
+    });
+  }
+
+  match = text.match(/^add\s+(?:pick\s+)?([A-Z][A-Z0-9.&-]{1,20})$/i);
+  if (match) {
+    return emptyAction({
+      action: 'create_pick',
+      title: match[1].toUpperCase(),
+      success_message: `${match[1].toUpperCase()} pick added.`
+    });
+  }
+
+  match = text.match(/^(.+?)\s+on\s+(\d{1,2}\s+\w+(?:\s+\d{4})?)\s+at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/i);
+  if (match) {
+    return emptyAction({
+      action: 'create_event',
+      title: match[1].trim(),
+      date: match[2].trim(),
+      time: match[3].trim(),
+      success_message: 'Calendar event created.'
+    });
+  }
+
+  match = text.match(/^delete\s+(?:my\s+)?note\s+(.+)$/i);
+  if (match) {
+    return emptyAction({ action: 'delete_note', title: match[1].trim(), success_message: 'Note removed.' });
+  }
+
+  match = text.match(/^delete\s+(?:my\s+)?task\s+(.+)$/i);
+  if (match) {
+    return emptyAction({ action: 'delete_task', title: match[1].trim(), success_message: 'Task removed.' });
+  }
+
+  return null;
+}
+
+function isRateLimitError(message) {
+  return /rate limit|quota|tokens per day|too many requests|429|try again in/i.test(String(message || ''));
+}
+
 function providerOrder() {
   const forced = readEnv('AI_PROVIDER').toLowerCase();
   if (forced && forced !== 'auto') return [forced];
@@ -177,7 +345,7 @@ function providerConfigs() {
         name: 'gemini',
         type: 'gemini',
         apiKey,
-        model: readEnv('GEMINI_MODEL') || 'gemini-2.0-flash'
+        model: readEnv('GEMINI_MODEL') || 'gemini-1.5-flash'
       };
     },
     openrouter: () => {
@@ -188,7 +356,7 @@ function providerConfigs() {
         type: 'openai-compatible',
         apiKey,
         baseUrl: 'https://openrouter.ai/api/v1',
-        model: readEnv('OPENROUTER_MODEL') || 'google/gemini-2.0-flash-001',
+        model: readEnv('OPENROUTER_MODEL') || 'google/gemini-2.0-flash-exp:free',
         extraHeaders: {
           'HTTP-Referer': siteUrl,
           'X-Title': 'HK Dashboard'
@@ -203,7 +371,7 @@ function providerConfigs() {
         type: 'openai-compatible',
         apiKey,
         baseUrl: 'https://api.groq.com/openai/v1',
-        model: readEnv('GROQ_MODEL') || 'llama-3.3-70b-versatile'
+        model: readEnv('GROQ_MODEL') || 'llama-3.1-8b-instant'
       };
     },
     openai: () => {
@@ -257,7 +425,7 @@ function buildMessages({ message, context, history = [] }) {
     { role: 'system', content: buildContextMessage(context) }
   ];
 
-  (Array.isArray(history) ? history : []).slice(-8).forEach((entry) => {
+  (Array.isArray(history) ? history : []).slice(-4).forEach((entry) => {
     if (!entry || !entry.role || !entry.text) return;
     messages.push({
       role: entry.role === 'assistant' ? 'assistant' : 'user',
@@ -364,10 +532,16 @@ async function callOpenAiCompatible(config, messages) {
 }
 
 async function callAi({ message, context, history = [] }) {
+  const local = parseLocalAction(message);
+  if (local) {
+    return { result: local, provider: 'local', model: 'unlimited' };
+  }
+
   const messages = buildMessages({ message, context, history });
   const configs = providerConfigs();
   const attempts = [];
   let lastError = null;
+  let rateLimited = false;
 
   for (const name of providerOrder()) {
     const factory = configs[name];
@@ -390,11 +564,27 @@ async function callAi({ message, context, history = [] }) {
     } catch (error) {
       lastError = error;
       attempts.push(`${config.name}: ${error.message}`);
+      if (isRateLimitError(error.message)) rateLimited = true;
     }
   }
 
+  const fallback = parseLocalAction(message);
+  if (fallback) {
+    return {
+      result: {
+        ...fallback,
+        success_message: `${fallback.success_message || 'Done.'} (offline mode — no API used)`
+      },
+      provider: 'local-fallback',
+      model: 'unlimited'
+    };
+  }
+
   if (attempts.length) {
-    throw createHttpError(attempts.join(' | '), errorStatus(lastError) || 502);
+    const hint = rateLimited
+      ? ' Free API daily limit reached. Use simple commands like "add task buy milk", "check 8 boxes for Gym", or "list habits" — these work offline with no limit. Limits reset on your API provider (usually daily).'
+      : '';
+    throw createHttpError(attempts.join(' | ') + hint, errorStatus(lastError) || 502);
   }
 
   throw createHttpError(

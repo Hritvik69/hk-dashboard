@@ -131,6 +131,8 @@ The dashboard includes **HK AI**, a built-in action assistant for notes, tasks, 
 
 If the first provider fails, HK AI automatically tries the next one in order.
 
+**No dashboard hourly limit.** Simple commands (add task, add habit, check boxes, list items) run in **offline unlimited mode** without using API credits. Free API limits (Groq/Gemini/OpenRouter) only apply to complex chat questions.
+
 Examples:
 
 - `Add a note: milk, bread, eggs`

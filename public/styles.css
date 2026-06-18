@@ -28,10 +28,22 @@ body {
   min-height: 100vh;
   margin: 0;
   color: var(--text);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
   background:
     radial-gradient(circle at 16% 18%, rgba(139, 92, 246, 0.22), transparent 28%),
     radial-gradient(circle at 86% 10%, rgba(73, 215, 233, 0.18), transparent 26%),
     linear-gradient(140deg, #0b1020 0%, #0a1221 42%, #100d19 100%);
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 button,

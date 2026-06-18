@@ -26,6 +26,7 @@ For check_habit: use "count" for how many boxes from day 1 (e.g. tick 8 boxes �
 For create_habit with initial ticks: set count to number of boxes to pre-check.
 Picks: create_pick, delete_pick, list_picks
 Gallery: create_album, delete_album, list_albums, list_files
+Links: open_link, list_links
 Summary: list_dashboard
 Clarification: clarification (when confidence is below 80%)
 Chat: chat (for informational questions only)
@@ -70,6 +71,8 @@ Unused fields must be null.
 "Remove RELIANCE pick" → delete_pick
 "Create album Vacation" → create_album
 "What do I have?" → list_dashboard
+"Open YouTube" / "Open stock screener" / "Go to TradingView" → open_link (put site name in title)
+"List links" → list_links
 
 ## AUTO TITLES
 
@@ -175,6 +178,7 @@ function parseLocalAction(message) {
   const text = String(message || '').trim();
   if (!text) return null;
   const lower = text.toLowerCase();
+  let match;
 
   if (/^(list|show)\s+(my\s+)?notes?$/i.test(text) || /^what notes/i.test(lower)) {
     return emptyAction({ action: 'list_notes', success_message: 'Notes listed.' });
@@ -195,7 +199,20 @@ function parseLocalAction(message) {
     return emptyAction({ action: 'list_dashboard', success_message: 'Dashboard summary ready.' });
   }
 
-  let   match = text.match(/^(?:check|tick)\s*(\d+)\s*box(?:es)?(?:\s*at)?\s*(?:for\s+)?(.+)$/i);
+  match = text.match(/^(?:open|launch|go to|visit)\s+(?:my\s+)?(.+)$/i);
+  if (match) {
+    return emptyAction({
+      action: 'open_link',
+      title: match[1].trim(),
+      success_message: `Opening ${match[1].trim()}...`
+    });
+  }
+
+  if (/^list\s+links?$/i.test(text) || /^what (?:sites|links) can i open/i.test(lower)) {
+    return emptyAction({ action: 'list_links', success_message: 'Quick links listed.' });
+  }
+
+  let match = text.match(/^(?:check|tick)\s*(\d+)\s*box(?:es)?(?:\s*at)?\s*(?:for\s+)?(.+)$/i);
   if (match) {
     return emptyAction({
       action: 'check_habit',
@@ -416,6 +433,7 @@ Habits: ${JSON.stringify(context.habits || [])}
 Picks: ${JSON.stringify(context.picks || [])}
 Albums: ${JSON.stringify(context.albums || [])}
 Files: ${JSON.stringify(context.files || [])}
+Links: ${JSON.stringify(context.links || [])}
 Summary: ${JSON.stringify(context.summary || {})}`;
 }
 

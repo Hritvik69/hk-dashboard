@@ -47,7 +47,7 @@ const ui = {
   let aiMessages = [
     {
       role: 'assistant',
-      text: 'I am HK AI. I can manage notes, tasks, calendar, growth habits, stock picks, and albums. Chats here are temporary — only dashboard changes are saved.'
+      text: 'I am HK AI. I can manage your dashboard, open quick links (YouTube, Stock Screener, etc.), and answer questions. Chats are temporary — only dashboard changes are saved.'
     }
   ];
 
@@ -59,6 +59,61 @@ const ui = {
     ['YouTube', 'https://www.youtube.com/', 'YT'],
     ['ChatGPT', 'https://chatgpt.com/', 'AI']
   ];
+
+  const quickLinkAliases = {
+    youtube: 'YouTube',
+    yt: 'YouTube',
+    'stock screener': 'Stock Screener',
+    screener: 'Stock Screener',
+    stocks: 'Stock Screener',
+    nse: 'Stock Screener',
+    sentinel: 'Stock Screener',
+    tradingview: 'TradingView',
+    'trading view': 'TradingView',
+    tv: 'TradingView',
+    github: 'GitHub',
+    gh: 'GitHub',
+    chatgpt: 'ChatGPT',
+    gpt: 'ChatGPT',
+    chat: 'ChatGPT',
+    'test paper': 'Test Paper Generator',
+    'test paper generator': 'Test Paper Generator',
+    edutest: 'Test Paper Generator',
+    tp: 'Test Paper Generator'
+  };
+
+  function resolveQuickLink(query) {
+    const raw = String(query || '').trim();
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) return raw;
+
+    const needle = raw.toLowerCase().replace(/^(open|launch|go to|visit)\s+/i, '').trim();
+    const aliasLabel = quickLinkAliases[needle];
+    if (aliasLabel) {
+      const aliasLink = quickLinks.find(([label]) => label === aliasLabel);
+      if (aliasLink) return { label: aliasLink[0], url: aliasLink[1] };
+    }
+
+    const direct = quickLinks.find(([label]) => label.toLowerCase() === needle);
+    if (direct) return { label: direct[0], url: direct[1] };
+
+    const fuzzy = quickLinks.find(([label]) => {
+      const labelLower = label.toLowerCase();
+      return labelLower.includes(needle) || needle.includes(labelLower);
+    });
+    if (fuzzy) return { label: fuzzy[0], url: fuzzy[1] };
+
+    return null;
+  }
+
+  function openQuickLink(query) {
+    const target = resolveQuickLink(query);
+    if (!target) {
+      return `Could not find "${query}". Say "list links" to see options: ${quickLinks.map(([label]) => label).join(', ')}.`;
+    }
+    window.open(target.url, '_blank', 'noopener,noreferrer');
+    return `Opened ${target.label}.`;
+  }
 
   function defaultAlbum(createdAt = '') {
     return {
@@ -1812,7 +1867,8 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         picks: state.picks.length,
         albums: (state.albums || []).length,
         files: (state.photos || []).length
-      }
+      },
+      links: quickLinks.map(([name, url]) => ({ name, url }))
     };
   }
 
@@ -1899,6 +1955,15 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
     if (action === 'clarification') {
       return String(payload.question || 'Should I save this as a note, task, or calendar event?');
+    }
+
+    if (action === 'open_link' || action === 'open') {
+      const message = openQuickLink(payload.title || payload.content || payload.description);
+      return payload.success_message || message;
+    }
+
+    if (action === 'list_links') {
+      return quickLinks.map(([label], index) => `${index + 1}. ${label}`).join('\n');
     }
 
     if (action === 'create_note') return aiCreateNote(payload);
@@ -2257,7 +2322,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
           ${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}
         </div>
         <form class="hk-ai-compose" id="hk-ai-form">
-          <input id="hk-ai-input" placeholder="Notes, tasks, habits, picks, albums..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
+          <input id="hk-ai-input" placeholder="Open YouTube, add task, check habits..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
           <button type="submit" ${ui.aiLoading ? 'disabled' : ''}>Send</button>
         </form>
         <p class="hk-ai-footnote">Chats are temporary. Only dashboard changes are saved.</p>

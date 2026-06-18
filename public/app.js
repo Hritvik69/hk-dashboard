@@ -517,7 +517,7 @@ const ui = {
     else if (focus.noteCodeInput) el = document.querySelector(`[data-note-code-input="${focus.noteCodeInput}"]`);
 
     if (!el) return;
-    el.focus();
+    el.focus({ preventScroll: true });
     if (typeof focus.start === 'number' && typeof focus.end === 'number' && el.setSelectionRange) {
       try {
         el.setSelectionRange(focus.start, focus.end);
@@ -1687,6 +1687,70 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     );
   }
 
+  function habitGridDays(habit, count = 30) {
+    const start = habitStartKey(habit) || growthStartKey();
+    return Array.from({ length: count }, (_, index) => addDaysKey(start, index));
+  }
+
+  function parseHabitCheckCount(payload) {
+    const sources = [payload.count, payload.description, payload.content, payload.status];
+    for (const source of sources) {
+      if (source == null || source === '') continue;
+      const raw = String(source).trim();
+      const patterns = [
+        /(\d+)\s*boxes?/i,
+        /tick\s*(\d+)/i,
+        /check\s*(\d+)/i,
+        /(?:box|day)\s*(?:at|#)?\s*(\d+)/i,
+        /^(\d+)$/
+      ];
+      for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match) {
+          const value = Number(match[1]);
+          if (value >= 1 && value <= 30) return value;
+        }
+      }
+    }
+    return 0;
+  }
+
+  function resolveHabitCheckDays(payload, habit) {
+    const raw = String(payload.description || payload.content || '').trim();
+    const slotMatch = raw.match(/(?:box|day)\s*(?:at|#)?\s*(\d+)/i);
+    if (slotMatch) {
+      const slot = Number(slotMatch[1]);
+      const days = habitGridDays(habit);
+      if (slot >= 1 && slot <= 30) return [days[slot - 1]];
+    }
+
+    const count = parseHabitCheckCount(payload);
+    if (count > 0) return habitGridDays(habit, count);
+
+    const date = resolveAiDate(payload.date);
+    if (date) return [date];
+
+    return [todayKey()];
+  }
+
+  function applyHabitChecks(checks, days, checked) {
+    const next = { ...(checks || {}) };
+    days.forEach((day) => {
+      if (checked) next[day] = true;
+      else delete next[day];
+    });
+    return next;
+  }
+
+  function buildInitialHabitChecks(startDate, count) {
+    if (!count) return {};
+    const checks = {};
+    for (let index = 0; index < Math.min(count, 30); index += 1) {
+      checks[addDaysKey(startDate, index)] = true;
+    }
+    return checks;
+  }
+
   function habitProgress(habit) {
     return Object.values(habit.checks || {}).filter(Boolean).length;
   }
@@ -1978,22 +2042,30 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       const names = splitAiLines(payload.title || payload.content);
       const habitNames = names.length ? names : [String(payload.title || payload.content || '').trim()].filter(Boolean);
       if (!habitNames.length) return 'Habit name is missing.';
+      const checkCount = parseHabitCheckCount(payload);
 
-      mutate((current) => ({
-        ...current,
-        growthStartDate: current.growthStartDate || todayKey(),
-        habits: [
-          ...current.habits,
-          ...habitNames.map((name) => ({
-            id: uid('habit'),
-            name,
-            color: '#8b5cf6',
-            startDate: current.growthStartDate || todayKey(),
-            createdAt: new Date().toISOString(),
-            checks: {}
-          }))
-        ]
-      }));
+      mutate((current) => {
+        const growthStartDate = current.growthStartDate || todayKey();
+        return {
+          ...current,
+          growthStartDate,
+          habits: [
+            ...current.habits,
+            ...habitNames.map((name) => ({
+              id: uid('habit'),
+              name,
+              color: '#8b5cf6',
+              startDate: growthStartDate,
+              createdAt: new Date().toISOString(),
+              checks: buildInitialHabitChecks(growthStartDate, checkCount)
+            }))
+          ]
+        };
+      });
+
+      if (checkCount > 0) {
+        return payload.success_message || `Habit added with ${checkCount} day${checkCount === 1 ? '' : 's'} checked.`;
+      }
       return payload.success_message || (habitNames.length > 1 ? `${habitNames.length} habits added.` : 'Habit added.');
     }
 
@@ -2011,17 +2083,21 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     if (action === 'check_habit' || action === 'uncheck_habit') {
       const habit = findHabit(payload.id || payload.title || payload.content);
       if (!habit) return 'Could not find that habit.';
-      const day = resolveAiDate(payload.date) || todayKey();
+      const days = resolveHabitCheckDays(payload, habit);
       mutate((current) => ({
         ...current,
         habits: current.habits.map((item) => {
           if (item.id !== habit.id) return item;
-          const checks = { ...(item.checks || {}) };
-          if (action === 'check_habit') checks[day] = true;
-          else delete checks[day];
-          return { ...item, startDate: habitStartKey(item) || day, checks };
+          return {
+            ...item,
+            startDate: habitStartKey(item) || days[0],
+            checks: applyHabitChecks(item.checks, days, action === 'check_habit')
+          };
         })
       }));
+      if (action === 'check_habit' && days.length > 1) {
+        return payload.success_message || `${days.length} days checked for ${habit.name}.`;
+      }
       return payload.success_message || (action === 'check_habit' ? 'Habit marked done.' : 'Habit mark removed.');
     }
 
@@ -2224,9 +2300,13 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       });
     } finally {
       ui.aiLoading = false;
-      render();
-      const input = document.getElementById('hk-ai-input');
-      if (input && ui.aiOpen) input.focus();
+      const panel = document.getElementById('hk-ai-messages');
+      if (panel) {
+        refreshAiPanel();
+        document.getElementById('hk-ai-input')?.focus({ preventScroll: true });
+      } else {
+        render();
+      }
     }
   }
 
@@ -2234,7 +2314,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     document.getElementById('hk-ai-toggle')?.addEventListener('click', () => {
       ui.aiOpen = !ui.aiOpen;
       render();
-      if (ui.aiOpen) document.getElementById('hk-ai-input')?.focus();
+      if (ui.aiOpen) document.getElementById('hk-ai-input')?.focus({ preventScroll: true });
     });
 
     document.getElementById('hk-ai-close')?.addEventListener('click', () => {
@@ -2258,6 +2338,8 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       return;
     }
 
+    const scrollY = window.scrollY;
+    const aiScrollTop = document.getElementById('hk-ai-messages')?.scrollTop || 0;
     const drafts = captureDraftState();
     const now = new Date();
     const openTasks = state.tasks.filter((task) => !task.done);
@@ -2298,6 +2380,11 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     bindEvents();
     bindAiEvents();
     restoreDraftState(drafts);
+    window.scrollTo(0, scrollY);
+    const aiMessagesEl = document.getElementById('hk-ai-messages');
+    if (aiMessagesEl) {
+      aiMessagesEl.scrollTop = ui.aiOpen ? Math.max(aiScrollTop, aiMessagesEl.scrollHeight - aiMessagesEl.clientHeight) : aiScrollTop;
+    }
     startClockTicker();
   }
 

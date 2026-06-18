@@ -1541,6 +1541,7 @@ h3 {
   overflow: auto;
   min-height: 220px;
   max-height: min(52vh, 460px);
+  overscroll-behavior: contain;
 }
 
 .hk-ai-msg {

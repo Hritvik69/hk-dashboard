@@ -22,6 +22,8 @@ Notes: create_note, update_note, delete_note, list_notes
 Todo: create_task, update_task, complete_task, delete_task, list_tasks
 Calendar: create_event, update_event, delete_event, list_events
 Growth: create_habit, delete_habit, check_habit, uncheck_habit, list_habits
+For check_habit: use "count" for how many boxes from day 1 (e.g. tick 8 boxes → count: 8). Use "date" for a single day. If habit already exists, use check_habit — never create_habit again.
+For create_habit with initial ticks: set count to number of boxes to pre-check.
 Picks: create_pick, delete_pick, list_picks
 Gallery: create_album, delete_album, list_albums, list_files
 Summary: list_dashboard
@@ -48,7 +50,8 @@ For chat action: return ONE JSON object with action "chat" and the answer in "co
   "status": null,
   "id": null,
   "success_message": "",
-  "question": null
+  "question": null,
+  "count": null
 }
 
 Unused fields must be null.

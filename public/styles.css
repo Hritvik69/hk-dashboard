@@ -81,7 +81,7 @@ textarea[data-note-body-input] {
   white-space: pre-wrap !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 input:focus,
@@ -525,6 +525,8 @@ h3 {
 .note-card {
   padding: 12px;
   margin-bottom: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .card-title-row {
@@ -552,6 +554,16 @@ h3 {
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.5;
+  max-width: 100%;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.note-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
   max-width: 100%;
 }
 
@@ -593,7 +605,8 @@ h3 {
   background: rgba(99, 210, 151, 0.24);
 }
 
-.note-card .edit-button {
+.note-card .edit-button,
+.note-card .copy-button {
   min-height: 32px;
   padding: 0 12px;
   color: var(--cyan);
@@ -604,9 +617,16 @@ h3 {
   text-transform: uppercase;
 }
 
-.note-card .edit-button:hover {
+.note-card .edit-button:hover,
+.note-card .copy-button:hover {
   border-color: rgba(73, 215, 233, 0.62);
   background: rgba(73, 215, 233, 0.14);
+}
+
+.note-card .copy-button.copied {
+  color: #ffffff;
+  border-color: rgba(99, 210, 151, 0.7);
+  background: rgba(99, 210, 151, 0.22);
 }
 
 .note-code-block {
@@ -1390,6 +1410,14 @@ h3 {
 
   .album-lock-panel {
     grid-template-columns: 1fr;
+  }
+
+  .card-title-row {
+    grid-template-columns: 1fr;
+  }
+
+  .note-top-actions {
+    justify-content: flex-start;
   }
 
   .gate-card {

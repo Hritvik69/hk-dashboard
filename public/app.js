@@ -958,12 +958,22 @@ const ui = {
           .join('')
       : '<p class="empty">No todo</p>';
 
-const notesHtml = state.notes.length
+    const notesHtml = state.notes.length
       ? state.notes
           .slice(0, 6)
           .map((note) => {
             const isEditing = ui.editingNoteId === note.id;
             const codeBlocks = Array.isArray(note.codeBlocks) ? note.codeBlocks : [];
+            const noteActions = isEditing
+              ? `<div class="note-top-actions">
+                  <button type="button" class="remove-button" data-note-cancel="${escapeHtml(note.id)}">Cancel</button>
+                  <button type="button" class="save-button" data-note-save="${escapeHtml(note.id)}">Save</button>
+                </div>`
+              : `<div class="note-top-actions">
+                  <button type="button" class="copy-button" data-note-copy="${escapeHtml(note.id)}">Copy</button>
+                  <button type="button" class="edit-button" data-note-edit="${escapeHtml(note.id)}">Edit</button>
+                  <button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>
+                </div>`;
             const titleField = isEditing
               ? `<input class="note-title-input" data-note-title-input="${escapeHtml(note.id)}" value="${escapeHtml(note.title || '')}" placeholder="Title" />`
               : `<strong>${escapeHtml(note.title || 'Untitled note')}</strong>`;
@@ -979,10 +989,10 @@ const notesHtml = state.notes.length
                     if (isEditing) {
                       return `<div class="note-code-block-editor" data-code-block="${blockId}">
                         <div class="code-lang-row">
-                          <input data-note-code-lang="${blockId}" value="${escapeHtml(lang)}" placeholder="language (js, py, sql…)" maxlength="24" />
+                          <input data-note-code-lang="${blockId}" value="${escapeHtml(lang)}" placeholder="language (js, py, sql...)" maxlength="24" />
                           <button type="button" class="remove-button" data-note-code-remove="${blockId}">Remove</button>
                         </div>
-                        <textarea wrap="soft" data-note-code-input="${blockId}" placeholder="Paste your code here…">${escapeHtml(content)}</textarea>
+                        <textarea wrap="soft" data-note-code-input="${blockId}" placeholder="Paste your code here...">${escapeHtml(content)}</textarea>
                       </div>`;
                     }
                     return `<div class="note-code-block">
@@ -1000,21 +1010,14 @@ const notesHtml = state.notes.length
                   <button type="button" class="add-code-button" data-note-code-add="${escapeHtml(note.id)}">+ Add code</button>
                 </div>`
               : '';
-            const editControls = isEditing
-              ? `<div class="note-edit-actions">
-                  <button type="button" class="remove-button" data-note-cancel="${escapeHtml(note.id)}">Cancel</button>
-                  <button type="button" class="save-button" data-note-save="${escapeHtml(note.id)}">Save</button>
-                </div>`
-              : `<button type="button" class="edit-button" data-note-edit="${escapeHtml(note.id)}">Edit</button>`;
             return `<div class="note-card ${isEditing ? 'editing' : ''}">
               <div class="card-title-row">
                 ${titleField}
-                ${isEditing ? '' : `<button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>`}
+                ${noteActions}
               </div>
               ${bodyField}
               ${codeBlocksHtml}
               ${addCodeRow}
-              <div class="note-edit-actions">${editControls}</div>
             </div>`;
           })
           .join('')
@@ -1494,6 +1497,10 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
       button.addEventListener('click', () => saveNoteEdit(button.dataset.noteSave));
     });
 
+    document.querySelectorAll('[data-note-copy]').forEach((button) => {
+      button.addEventListener('click', (event) => copyNote(event.currentTarget));
+    });
+
     document.querySelectorAll('[data-note-code-add]').forEach((button) => {
       button.addEventListener('click', () => addCodeBlockToNote(button.dataset.noteCodeAdd));
     });
@@ -1775,11 +1782,19 @@ function deleteTask(id) {
     }));
   }
 
-  async function copyCodeBlock(button) {
-    const blockId = button.getAttribute('data-note-copy-code');
-    if (!blockId) return;
-    const pre = document.querySelector(`[data-note-code-content="${blockId}"]`);
-    const text = pre ? pre.textContent || '' : '';
+  function noteClipboardText(note) {
+    const parts = [];
+    if (note.title) parts.push(String(note.title));
+    if (note.body) parts.push(String(note.body));
+    (Array.isArray(note.codeBlocks) ? note.codeBlocks : []).forEach((block) => {
+      const lang = String(block?.lang || 'text').trim() || 'text';
+      const content = String(block?.content || '');
+      if (content) parts.push(`[${lang}]\n${content}`);
+    });
+    return parts.join('\n\n').trim();
+  }
+
+  async function writeClipboard(text) {
     let copied = false;
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -1799,6 +1814,10 @@ function deleteTask(id) {
     } catch {
       copied = false;
     }
+    return copied;
+  }
+
+  function flashCopyButton(button, copied) {
     const original = button.textContent;
     button.textContent = copied ? 'Copied' : 'Failed';
     button.classList.toggle('copied', copied);
@@ -1806,6 +1825,21 @@ function deleteTask(id) {
       button.textContent = original;
       button.classList.remove('copied');
     }, 1500);
+  }
+
+  async function copyNote(button) {
+    const noteId = button.getAttribute('data-note-copy');
+    const note = (state.notes || []).find((item) => item.id === noteId);
+    if (!note) return;
+    flashCopyButton(button, await writeClipboard(noteClipboardText(note)));
+  }
+
+  async function copyCodeBlock(button) {
+    const blockId = button.getAttribute('data-note-copy-code');
+    if (!blockId) return;
+    const pre = document.querySelector(`[data-note-code-content="${blockId}"]`);
+    const text = pre ? pre.textContent || '' : '';
+    flashCopyButton(button, await writeClipboard(text));
   }
 
   function normalizeNotePaste(event) {

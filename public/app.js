@@ -36,8 +36,17 @@ const ui = {
     selectedAlbumId: DEFAULT_ALBUM_ID,
     albumError: '',
     gateError: '',
-    editingNoteId: ''
+    editingNoteId: '',
+    aiOpen: false,
+    aiLoading: false
   };
+
+  let aiMessages = [
+    {
+      role: 'assistant',
+      text: 'I am HK AI. Tell me to add a note, task, or calendar event — or ask me anything.'
+    }
+  ];
 
   const quickLinks = [
     ['Test Paper Generator', 'https://edu-test-ai-rho.vercel.app/', 'TP'],
@@ -1390,6 +1399,453 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     });
   }
 
+  function normalizeAiPriority(value) {
+    const raw = String(value || 'Normal').trim().toLowerCase();
+    if (raw === 'high') return 'High';
+    if (raw === 'low') return 'Low';
+    return 'Normal';
+  }
+
+  function resolveAiDate(value) {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (isDateKey(raw)) return raw;
+
+    const lower = raw.toLowerCase();
+    const now = new Date();
+
+    if (lower === 'today') return todayKey();
+    if (lower === 'tomorrow') return todayKey(1);
+    if (lower === 'next week') return todayKey(7);
+
+    const weekdayMatch = lower.match(/^next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/);
+    if (weekdayMatch) {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const target = days.indexOf(weekdayMatch[1]);
+      const date = new Date(now);
+      let delta = (target - date.getDay() + 7) % 7;
+      if (delta === 0) delta = 7;
+      date.setDate(date.getDate() + delta);
+      return dateKey(date);
+    }
+
+    const dmy = lower.match(/^(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{4}))?$/);
+    if (dmy) {
+      const months = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+      };
+      const monthKey = dmy[2].slice(0, 3);
+      const month = months[monthKey];
+      if (month !== undefined) {
+        const year = Number(dmy[3]) || now.getFullYear();
+        const day = Number(dmy[1]);
+        const date = new Date(year, month, day);
+        if (!Number.isNaN(date.getTime())) return dateKey(date);
+      }
+    }
+
+    return raw;
+  }
+
+  function resolveAiTime(value) {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+
+    const match = raw.toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+    if (!match) return raw;
+
+    let hour = Number(match[1]);
+    const minute = Number(match[2] || 0);
+    const meridiem = match[3];
+
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+
+  function splitAiLines(value) {
+    return String(value || '')
+      .split(/\n+/)
+      .flatMap((line) => line.split(/[,;]+/))
+      .map((line) => line.replace(/^[-*•\d.)]+\s*/, '').trim())
+      .filter(Boolean);
+  }
+
+  function findNote(query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.notes.find((note) => note.id === query) ||
+      state.notes.find((note) => String(note.title || '').toLowerCase().includes(needle)) ||
+      state.notes.find((note) => String(note.body || '').toLowerCase().includes(needle))
+    );
+  }
+
+  function findTask(query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.tasks.find((task) => task.id === query) ||
+      state.tasks.find((task) => String(task.text || '').toLowerCase().includes(needle))
+    );
+  }
+
+  function findEvent(query) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.events.find((event) => event.id === query) ||
+      state.events.find((event) => String(event.title || '').toLowerCase().includes(needle))
+    );
+  }
+
+  function buildAiContext() {
+    return {
+      today: todayKey(),
+      notes: state.notes.slice(0, 30).map((note) => ({
+        id: note.id,
+        title: note.title || note.body?.split('\n')[0] || 'Untitled'
+      })),
+      tasks: state.tasks.slice(0, 30).map((task) => ({
+        id: task.id,
+        text: task.text,
+        done: Boolean(task.done)
+      })),
+      events: state.events.slice(0, 30).map((event) => ({
+        id: event.id,
+        title: event.title,
+        date: event.date,
+        time: event.time || ''
+      }))
+    };
+  }
+
+  function aiCreateNote(payload) {
+    const body = String(payload.content || payload.description || payload.title || '').trim();
+    if (!body) return 'Note content is missing.';
+    const title = String(payload.title || body.split('\n')[0]).slice(0, 60);
+
+    mutate((current) => ({
+      ...current,
+      notes: [
+        {
+          id: uid('note'),
+          title,
+          body,
+          pinned: false,
+          createdAt: new Date().toISOString()
+        },
+        ...current.notes
+      ]
+    }));
+    return payload.success_message || 'Note created.';
+  }
+
+  function aiCreateTask(payload) {
+    const lines = splitAiLines(payload.content || payload.title);
+    const titles = lines.length ? lines : [String(payload.title || '').trim()].filter(Boolean);
+    if (!titles.length) return 'Task title is missing.';
+
+    const dueDate = resolveAiDate(payload.date);
+    const priority = normalizeAiPriority(payload.priority);
+
+    mutate((current) => ({
+      ...current,
+      tasks: [
+        ...titles.map((text) => ({
+          id: uid('task'),
+          text,
+          done: false,
+          dueDate,
+          priority,
+          createdAt: new Date().toISOString()
+        })),
+        ...current.tasks
+      ]
+    }));
+
+    return payload.success_message || (titles.length > 1 ? `${titles.length} tasks created.` : 'Task created.');
+  }
+
+  function aiCreateEvent(payload) {
+    const title = String(payload.title || payload.content || '').trim();
+    if (!title) return 'Event title is missing.';
+
+    const date = resolveAiDate(payload.date) || ui.selectedDate || todayKey(1);
+    const time = resolveAiTime(payload.time);
+
+    mutate((current) => ({
+      ...current,
+      events: [
+        ...current.events,
+        {
+          id: uid('event'),
+          title,
+          date,
+          time,
+          done: false,
+          createdAt: new Date().toISOString()
+        }
+      ]
+    }));
+    ui.selectedDate = date;
+    return payload.success_message || 'Calendar event created.';
+  }
+
+  function executeAiAction(payload) {
+    if (!payload || typeof payload !== 'object') return 'I could not understand that request.';
+
+    const action = String(payload.action || '').trim().toLowerCase();
+
+    if (action === 'chat') {
+      return String(payload.content || payload.success_message || 'Done.');
+    }
+
+    if (action === 'clarification') {
+      return String(payload.question || 'Should I save this as a note, task, or calendar event?');
+    }
+
+    if (action === 'create_note') return aiCreateNote(payload);
+
+    if (action === 'update_note') {
+      const note = findNote(payload.id || payload.title);
+      if (!note) return 'Could not find that note.';
+      const body = String(payload.content || payload.description || note.body || '').trim();
+      const title = String(payload.title || body.split('\n')[0] || note.title).slice(0, 60);
+      mutate((current) => ({
+        ...current,
+        notes: current.notes.map((item) =>
+          item.id === note.id
+            ? { ...item, title, body, updatedAt: new Date().toISOString() }
+            : item
+        )
+      }));
+      return payload.success_message || 'Note updated.';
+    }
+
+    if (action === 'delete_note') {
+      const note = findNote(payload.id || payload.title);
+      if (!note) return 'Could not find that note.';
+      if (ui.editingNoteId === note.id) ui.editingNoteId = '';
+      mutate((current) => ({
+        ...current,
+        notes: current.notes.filter((item) => item.id !== note.id)
+      }));
+      return payload.success_message || 'Note removed.';
+    }
+
+    if (action === 'list_notes') {
+      if (!state.notes.length) return 'You have no notes yet.';
+      return state.notes
+        .slice(0, 12)
+        .map((note, index) => `${index + 1}. ${note.title || 'Untitled'}`)
+        .join('\n');
+    }
+
+    if (action === 'create_task') return aiCreateTask(payload);
+
+    if (action === 'update_task') {
+      const task = findTask(payload.id || payload.title);
+      if (!task) return 'Could not find that task.';
+      const text = String(payload.title || payload.content || task.text).trim();
+      mutate((current) => ({
+        ...current,
+        tasks: current.tasks.map((item) =>
+          item.id === task.id
+            ? {
+                ...item,
+                text,
+                dueDate: resolveAiDate(payload.date) || item.dueDate,
+                priority: normalizeAiPriority(payload.priority || item.priority)
+              }
+            : item
+        )
+      }));
+      return payload.success_message || 'Task updated.';
+    }
+
+    if (action === 'complete_task') {
+      const task = findTask(payload.id || payload.title);
+      if (!task) return 'Could not find that task.';
+      mutate((current) => ({
+        ...current,
+        tasks: current.tasks.map((item) =>
+          item.id === task.id
+            ? { ...item, done: true, completedAt: new Date().toISOString() }
+            : item
+        )
+      }));
+      return payload.success_message || 'Task completed.';
+    }
+
+    if (action === 'delete_task') {
+      const task = findTask(payload.id || payload.title);
+      if (!task) return 'Could not find that task.';
+      mutate((current) => ({
+        ...current,
+        tasks: current.tasks.filter((item) => item.id !== task.id)
+      }));
+      return payload.success_message || 'Task removed.';
+    }
+
+    if (action === 'list_tasks') {
+      const open = state.tasks.filter((task) => !task.done);
+      if (!open.length) return 'You have no open tasks.';
+      return open
+        .slice(0, 12)
+        .map((task, index) => `${index + 1}. ${task.text}${task.dueDate ? ` (${task.dueDate})` : ''}`)
+        .join('\n');
+    }
+
+    if (action === 'create_event') return aiCreateEvent(payload);
+
+    if (action === 'update_event') {
+      const event = findEvent(payload.id || payload.title);
+      if (!event) return 'Could not find that event.';
+      mutate((current) => ({
+        ...current,
+        events: current.events.map((item) =>
+          item.id === event.id
+            ? {
+                ...item,
+                title: String(payload.title || item.title).trim(),
+                date: resolveAiDate(payload.date) || item.date,
+                time: resolveAiTime(payload.time) || item.time
+              }
+            : item
+        )
+      }));
+      return payload.success_message || 'Event updated.';
+    }
+
+    if (action === 'delete_event') {
+      const event = findEvent(payload.id || payload.title);
+      if (!event) return 'Could not find that event.';
+      mutate((current) => ({
+        ...current,
+        events: current.events.filter((item) => item.id !== event.id)
+      }));
+      return payload.success_message || 'Event removed.';
+    }
+
+    if (action === 'list_events') {
+      const upcoming = state.events
+        .filter((event) => !event.done)
+        .sort((a, b) => `${a.date || ''}${a.time || ''}`.localeCompare(`${b.date || ''}${b.time || ''}`));
+      if (!upcoming.length) return 'You have no upcoming events.';
+      return upcoming
+        .slice(0, 12)
+        .map((event, index) => {
+          const when = [event.date, event.time].filter(Boolean).join(' ');
+          return `${index + 1}. ${event.title}${when ? ` — ${when}` : ''}`;
+        })
+        .join('\n');
+    }
+
+    return payload.success_message || 'Action completed.';
+  }
+
+  function renderAiMessages() {
+    return aiMessages
+      .map((entry) => {
+        const roleClass = entry.role === 'user' ? 'hk-ai-msg-user' : 'hk-ai-msg-assistant';
+        return `<div class="hk-ai-msg ${roleClass}">${escapeHtml(entry.text)}</div>`;
+      })
+      .join('');
+  }
+
+  function renderAiPanel() {
+    if (!isDashboardUnlocked()) return '';
+
+    return `<div class="hk-ai-root ${ui.aiOpen ? 'open' : ''}" id="hk-ai-root">
+      <button type="button" class="hk-ai-fab" id="hk-ai-toggle" aria-label="Open HK AI">
+        <span class="hk-ai-fab-mark">AI</span>
+      </button>
+      <section class="hk-ai-panel" id="hk-ai-panel" aria-label="HK AI assistant">
+        <header class="hk-ai-header">
+          <div>
+            <p class="eyebrow">Assistant</p>
+            <h3>HK AI</h3>
+          </div>
+          <button type="button" class="hk-ai-close" id="hk-ai-close" aria-label="Close HK AI">Close</button>
+        </header>
+        <div class="hk-ai-messages" id="hk-ai-messages">
+          ${renderAiMessages()}
+          ${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}
+        </div>
+        <form class="hk-ai-compose" id="hk-ai-form">
+          <input id="hk-ai-input" placeholder="Add note, task, event, or ask anything..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
+          <button type="submit" ${ui.aiLoading ? 'disabled' : ''}>Send</button>
+        </form>
+      </section>
+    </div>`;
+  }
+
+  function refreshAiPanel() {
+    const messages = document.getElementById('hk-ai-messages');
+    if (!messages) return;
+    messages.innerHTML = `${renderAiMessages()}${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}`;
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  async function sendAiMessage(text) {
+    const message = String(text || '').trim();
+    if (!message || ui.aiLoading) return;
+
+    aiMessages.push({ role: 'user', text: message });
+    ui.aiLoading = true;
+    refreshAiPanel();
+
+    try {
+      const payload = await apiRequest('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          context: buildAiContext(),
+          history: aiMessages.slice(-10)
+        })
+      });
+
+      const reply = executeAiAction(payload.result);
+      aiMessages.push({ role: 'assistant', text: reply });
+    } catch (error) {
+      aiMessages.push({
+        role: 'assistant',
+        text: error.message || 'HK AI is unavailable right now.'
+      });
+    } finally {
+      ui.aiLoading = false;
+      render();
+      const input = document.getElementById('hk-ai-input');
+      if (input && ui.aiOpen) input.focus();
+    }
+  }
+
+  function bindAiEvents() {
+    document.getElementById('hk-ai-toggle')?.addEventListener('click', () => {
+      ui.aiOpen = !ui.aiOpen;
+      render();
+      if (ui.aiOpen) document.getElementById('hk-ai-input')?.focus();
+    });
+
+    document.getElementById('hk-ai-close')?.addEventListener('click', () => {
+      ui.aiOpen = false;
+      render();
+    });
+
+    document.getElementById('hk-ai-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = document.getElementById('hk-ai-input');
+      const value = input?.value || '';
+      if (input) input.value = '';
+      sendAiMessage(value);
+    });
+  }
+
   function render() {
     if (!isDashboardUnlocked()) {
       root.innerHTML = renderPasswordGate();
@@ -1431,9 +1887,10 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         ${renderGallery()}
       </section>
     </main>
-    ${renderFileModal()}`;
+    ${renderFileModal()}${renderAiPanel()}`;
 
     bindEvents();
+    bindAiEvents();
   }
 
   function bindEvents() {

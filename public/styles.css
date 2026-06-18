@@ -1460,3 +1460,140 @@ h3 {
     justify-content: flex-start;
   }
 }
+
+.hk-ai-root {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.hk-ai-root * {
+  pointer-events: auto;
+}
+
+.hk-ai-fab {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  border: 1px solid rgba(73, 215, 233, 0.42);
+  background:
+    linear-gradient(145deg, rgba(73, 215, 233, 0.24), rgba(139, 92, 246, 0.28)),
+    rgba(12, 18, 34, 0.92);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  padding: 0;
+}
+
+.hk-ai-fab-mark {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.hk-ai-panel {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  display: none;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    linear-gradient(160deg, rgba(73, 215, 233, 0.1), rgba(139, 92, 246, 0.08)),
+    var(--panel-strong);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+
+.hk-ai-root.open .hk-ai-panel {
+  display: flex;
+}
+
+.hk-ai-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hk-ai-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.hk-ai-close {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
+.hk-ai-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  overflow: auto;
+  min-height: 220px;
+  max-height: min(52vh, 460px);
+}
+
+.hk-ai-msg {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hk-ai-msg-user {
+  align-self: flex-end;
+  color: white;
+  background: rgba(139, 92, 246, 0.34);
+  border: 1px solid rgba(139, 92, 246, 0.42);
+}
+
+.hk-ai-msg-assistant {
+  align-self: flex-start;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+}
+
+.hk-ai-msg-loading {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.hk-ai-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.hk-ai-compose input {
+  min-height: 42px;
+}
+
+.hk-ai-compose button {
+  min-width: 72px;
+}
+
+@media (max-width: 640px) {
+  .hk-ai-root {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .hk-ai-panel {
+    width: calc(100vw - 28px);
+  }
+}

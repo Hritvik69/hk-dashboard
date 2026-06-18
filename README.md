@@ -118,6 +118,28 @@ tailscale serve --bg http://127.0.0.1:4173
 
 This keeps it private to your Tailscale account. For personal use, this is the safest setup.
 
+## HK AI Assistant
+
+The dashboard includes **HK AI**, a built-in action assistant for notes, tasks, and calendar events.
+
+1. Add one or more provider keys to Vercel (server-side only):
+   - `GEMINI_API_KEY` — Google Gemini
+   - `OPENROUTER_API_KEY` — OpenRouter
+   - `GROQ_API_KEY` — Groq
+2. Optional: `AI_PROVIDER=auto` and `AI_PROVIDER_ORDER=gemini,openrouter,groq`
+3. Redeploy, then click the **AI** button in the bottom-right corner of the dashboard.
+
+If the first provider fails, HK AI automatically tries the next one in order.
+
+Examples:
+
+- `Add a note: milk, bread, eggs`
+- `Tomorrow finish Physics homework`
+- `English UT on 7 July at 9 AM`
+- `Mark Physics homework done`
+
+HK AI returns structured actions and updates your dashboard automatically.
+
 ## Tomorrow's Picks
 
 Tomorrow's Picks can arrive two ways.

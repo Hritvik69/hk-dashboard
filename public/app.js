@@ -1650,7 +1650,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
             <h1>HK Dashboard</h1>
           </div>
         </div>
-        <h2>Meet Your Father Who is Hritvik</h2>
+        <h2>To know the pass, talk to Hritvik (Developer)</h2>
         <p class="gate-copy">To see the Dashboard, enter the password.</p>
         <form class="gate-form" id="gate-form">
           <input id="gate-password" type="password" placeholder="Password" autocomplete="current-password" />

@@ -1601,7 +1601,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       ? session
         ? `<div class="account-box">
             <div><p>Signed in as ${escapeHtml(session.user.email)}</p><small>${escapeHtml(syncText)}</small></div>
-            <div class="button-row"><button type="button" id="sync-now">Sync now</button><button type="button" id="sign-out">Sign out</button></div>
+            <div class="button-row"><button type="button" id="sync-now">Sync now</button><button type="button" id="purge-orphans">Purge orphan files</button><button type="button" id="sign-out">Sign out</button></div>
           </div>`
         : `<form class="account-form" id="sign-in-form"><input id="email" type="email" placeholder="Email for cloud sync" required /><button type="submit">Send link</button></form>`
       : '<p class="muted-copy">Local saving is active. Add Supabase env vars on Vercel for cloud login and cross-device sync.</p>';
@@ -2698,6 +2698,12 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
       });
     });
 
+    byId('purge-orphans')?.addEventListener('click', () => {
+      purgeOrphanCloudFiles().catch((error) => {
+        setNotice(error.message || 'Purge failed.');
+      });
+    });
+
     byId('sign-in-form')?.addEventListener('submit', (event) => {
       event.preventDefault();
       const email = byId('email').value.trim();
@@ -3212,12 +3218,23 @@ function selectAlbum(id) {
     if (!confirmDelete(`album "${album.name}" and all files inside it`)) return;
 
     const files = (state.photos || []).filter((file) => (file.albumId || DEFAULT_ALBUM_ID) === album.id);
-    try {
-      for (const file of files) {
-        await removeStoredFile(file);
+    if (files.length) setNotice(`Removing ${files.length} file${files.length === 1 ? '' : 's'} from cloud storage…`);
+
+    const failures = [];
+    let cloudDeleted = 0;
+    let localOnly = 0;
+    for (const file of files) {
+      try {
+        const result = await removeStoredFile(file);
+        if (result?.deleted) cloudDeleted += 1;
+        else if (result?.skipped) localOnly += 1;
+      } catch (error) {
+        failures.push({ name: file.name || 'file', message: error.message || 'Unknown error' });
       }
-    } catch (error) {
-      setNotice(error.message || 'Could not remove every cloud file in this album.');
+    }
+
+    if (failures.length === files.length && files.length) {
+      setNotice(`Could not remove cloud files. Album kept. (${failures[0]?.message || 'unknown error'})`);
       return;
     }
 
@@ -3229,7 +3246,18 @@ function selectAlbum(id) {
       albums: current.albums.filter((item) => item.id !== id),
       photos: current.photos.filter((file) => (file.albumId || DEFAULT_ALBUM_ID) !== id)
     }));
-    setNotice('Album and its files removed.');
+
+    if (failures.length) {
+      const failedNames = failures.map((f) => f.name).slice(0, 3).join(', ');
+      const more = failures.length > 3 ? ` and ${failures.length - 3} more` : '';
+      setNotice(`Album removed. ${cloudDeleted} deleted from cloud, ${failures.length} kept (${failedNames}${more}).`);
+    } else if (cloudDeleted) {
+      setNotice(`Album removed. ${cloudDeleted} file${cloudDeleted === 1 ? '' : 's'} permanently deleted from cloud storage.`);
+    } else if (localOnly) {
+      setNotice(`Album removed. ${localOnly} file${localOnly === 1 ? '' : 's'} cleared from this browser (were not in cloud).`);
+    } else {
+      setNotice('Album removed.');
+    }
   }
 
 async function addFiles(event) {
@@ -3244,7 +3272,6 @@ async function addFiles(event) {
 
     setNotice(`Uploading ${selected.length} file${selected.length === 1 ? '' : 's'}...`);
     const uploaded = [];
-    let usedLocalFallback = false;
 
     for (const file of selected) {
       try {
@@ -3252,7 +3279,6 @@ async function addFiles(event) {
       } catch (error) {
         console.warn('Cloud file upload failed; using browser fallback.', error);
         uploaded.push(await createLocalFileRecord(file, album.id));
-        usedLocalFallback = true;
       }
     }
 
@@ -3261,11 +3287,15 @@ async function addFiles(event) {
       photos: [...uploaded, ...current.photos]
     }));
 
-    setNotice(
-      usedLocalFallback
-        ? 'Some files were saved only in this browser because cloud storage was not ready.'
-        : `${uploaded.length} file${uploaded.length === 1 ? '' : 's'} saved to cloud storage.`
-    );
+    const cloudCount = uploaded.filter((f) => f.storagePath).length;
+    const localCount = uploaded.length - cloudCount;
+    if (localCount && cloudCount) {
+      setNotice(`${cloudCount} saved to cloud, ${localCount} kept in this browser only.`);
+    } else if (localCount) {
+      setNotice(`${localCount} file${localCount === 1 ? '' : 's'} saved in this browser only — cloud storage was not ready.`);
+    } else {
+      setNotice(`${cloudCount} file${cloudCount === 1 ? '' : 's'} saved to cloud storage.`);
+    }
   }
 
   async function createLocalFileRecord(file, albumId = DEFAULT_ALBUM_ID) {
@@ -3404,11 +3434,14 @@ async function addFiles(event) {
   }
 
   async function removeStoredFile(file) {
-    if (!file?.storagePath) return;
-    await fileApi('delete', {
+    if (!file?.storagePath) {
+      return { skipped: true, reason: 'local-only' };
+    }
+    const result = await fileApi('delete', {
       bucket: file.storageBucket || FILE_BUCKET,
       path: file.storagePath
     });
+    return { deleted: true, attempt: result?.attempt, bucket: result?.bucket, path: result?.path };
   }
 
   async function downloadFile(id) {
@@ -3445,10 +3478,12 @@ async function addFiles(event) {
     if (!file) return;
     if (!confirmDelete(file.name || 'this file')) return;
 
+    setNotice(`Removing "${file.name || 'file'}" from cloud storage…`);
+    let result;
     try {
-      await removeStoredFile(file);
+      result = await removeStoredFile(file);
     } catch (error) {
-      setNotice(error.message || 'Could not remove cloud file.');
+      setNotice(`${error.message || 'Could not remove cloud file.'} File kept in dashboard.`);
       return;
     }
 
@@ -3458,7 +3493,44 @@ async function addFiles(event) {
       ...current,
       photos: current.photos.filter((item) => item.id !== id)
     }));
-    setNotice('File removed.');
+
+    if (result && result.deleted) {
+      setNotice(`"${file.name || 'file'}" permanently removed from cloud storage.`);
+    } else if (result && result.skipped) {
+      setNotice(`"${file.name || 'file'}" removed from this browser (was not in cloud storage).`);
+    } else {
+      setNotice(`"${file.name || 'file'}" removed.`);
+    }
+  }
+
+  async function purgeOrphanCloudFiles() {
+    if (!client || !session) {
+      setNotice('Sign in first so we can compare cloud files against your dashboard.');
+      return;
+    }
+    if (!window.confirm('Delete every cloud file in the personal folder that is NOT referenced by your dashboard? This is permanent.')) {
+      return;
+    }
+
+    setNotice('Scanning cloud storage for orphan files…');
+
+    const keepPaths = (state.photos || [])
+      .map((file) => file?.storagePath)
+      .filter(Boolean)
+      .map((path) => String(path).replace(/^personal\//, ''))
+      .map((name) => `personal/${name}`);
+
+    const result = await fileApi('purge-orphans', {
+      bucket: FILE_BUCKET,
+      folder: 'personal',
+      keepPaths
+    });
+
+    if (!result?.removed) {
+      setNotice(`Scanned ${result?.scanned || 0} cloud files. No orphans — everything in cloud storage is still referenced.`);
+      return;
+    }
+    setNotice(`Purged ${result.removed} orphan file${result.removed === 1 ? '' : 's'} from cloud storage. Scanned ${result.scanned || 0}.`);
   }
 
   function exportJson() {

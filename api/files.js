@@ -131,9 +131,54 @@ async function createReadUrl(admin, body) {
 async function deleteFile(admin, body) {
   const bucket = safeBucket(body.bucket);
   const path = safePath(body.path);
-  const { error } = await admin.storage.from(bucket).remove([path]);
-  if (error) throw createHttpError(error.message || 'Could not delete file.', 500);
-  return { bucket, path, deleted: true };
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const { data, error } = await admin.storage.from(bucket).remove([path]);
+    if (!error) {
+      console.log(`[files] deleted ${bucket}/${path} on attempt ${attempt}`);
+      return { bucket, path, deleted: true, attempt };
+    }
+    lastError = error;
+    console.warn(`[files] delete attempt ${attempt} failed for ${bucket}/${path}: ${error.message}`);
+    if (attempt === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw createHttpError(lastError?.message || 'Could not delete file.', 500);
+}
+
+async function purgeOrphanFiles(admin, body) {
+  const bucket = safeBucket(body.bucket);
+  const folder = String(body.folder || 'personal').replace(/[^a-z0-9._/-]/gi, '').slice(0, 80) || 'personal';
+  const keepPaths = new Set(
+    (Array.isArray(body.keepPaths) ? body.keepPaths : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  );
+
+  const listed = await admin.storage.from(bucket).list(folder, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+  if (listed.error) throw createHttpError(listed.error.message || 'Could not list files.', 500);
+
+  const orphans = (listed.data || [])
+    .filter((entry) => entry && entry.name && !keepPaths.has(`${folder}/${entry.name}`))
+    .map((entry) => `${folder}/${entry.name}`)
+    .filter((fullPath) => /^[a-z0-9._/-]{1,512}$/i.test(fullPath));
+
+  if (!orphans.length) {
+    return { bucket, folder, scanned: (listed.data || []).length, removed: 0 };
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const { error } = await admin.storage.from(bucket).remove(orphans);
+    if (!error) {
+      console.log(`[files] purged ${orphans.length} orphan(s) from ${bucket}/${folder} on attempt ${attempt}`);
+      return { bucket, folder, scanned: (listed.data || []).length, removed: orphans.length, attempt };
+    }
+    lastError = error;
+    if (attempt === 1) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw createHttpError(lastError?.message || 'Could not purge orphan files.', 500);
 }
 
 export default async function handler(req, res) {
@@ -167,6 +212,11 @@ export default async function handler(req, res) {
 
     if (action === 'delete') {
       json(res, 200, await deleteFile(admin, body));
+      return;
+    }
+
+    if (action === 'purge-orphans') {
+      json(res, 200, await purgeOrphanFiles(admin, body));
       return;
     }
 

@@ -39,6 +39,7 @@ const ui = {
     albumError: '',
     gateError: '',
     editingNoteId: '',
+    openBreakdownPickId: '',
     aiOpen: false,
     aiLoading: false
   };
@@ -47,7 +48,7 @@ const ui = {
   let aiMessages = [
     {
       role: 'assistant',
-      text: 'I am HK AI. I can manage your dashboard, open quick links (YouTube, Stock Screener, etc.), and answer questions. Chats are temporary — only dashboard changes are saved.'
+      text: 'I am HK AI. I can manage your dashboard, open quick links, and pick stocks. Try "best stock to buy" for a weighted top pick, "rank my picks" for a full ranking, or "open YouTube". Chats are temporary — only dashboard changes are saved.'
     }
   ];
 
@@ -408,6 +409,19 @@ const ui = {
     }
     if (/^(list|show)\s+(my\s+)?picks?$/i.test(text) || /^what picks/i.test(lower)) {
       return { action: 'list_picks' };
+    }
+
+    if (/rank|sort|score|grade/.test(lower) && /pick|stock|share/i.test(lower)) {
+      return { action: 'rank_picks' };
+    }
+
+    if (/(breakdown|why|explain|score breakdown)/i.test(lower) && /(pick|stock|[A-Z]{3,})/i.test(text)) {
+      const symbolMatch = text.match(/\b([A-Z][A-Z0-9.&-]{1,15})\b/);
+      return { action: 'pick_score_breakdown', title: symbolMatch ? symbolMatch[1] : '' };
+    }
+
+    if (/(best|top|which|recommend|suggest|should i buy|buy now|pick one|top pick|kill it|tell me (?:a|the)?\s*(?:best|top)|one stock)/i.test(lower) && /(stock|pick|share|buy|invest|trade|scalp|swing)/i.test(lower)) {
+      return { action: 'recommend_pick' };
     }
     if (/what do i have|dashboard summary|list dashboard/i.test(lower)) {
       return { action: 'list_dashboard' };
@@ -1115,6 +1129,319 @@ const ui = {
     return score ? `${score.toFixed(score % 1 ? 1 : 0)}/100` : '';
   }
 
+  // Weighted scoring rubric (sums to 100).
+  // - Trend 25 / Volume 20 / Relative Strength 15 / Momentum 15
+  //   Sector 10 / Risk vs Reward 10 / News 5
+  const STOCK_SCORE_WEIGHTS = [
+    { key: 'trend', label: 'Trend', weight: 25 },
+    { key: 'volume', label: 'Volume', weight: 20 },
+    { key: 'relativeStrength', label: 'Relative Strength', weight: 15 },
+    { key: 'momentum', label: 'Momentum', weight: 15 },
+    { key: 'sector', label: 'Sector Strength', weight: 10 },
+    { key: 'riskReward', label: 'Risk / Reward', weight: 10 },
+    { key: 'news', label: 'News / Trigger', weight: 5 }
+  ];
+
+  const STOCK_SCORE_TOTAL_WEIGHT = STOCK_SCORE_WEIGHTS.reduce((sum, item) => sum + item.weight, 0);
+
+  function pickNumeric(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const text = String(value).replace(/[, %]/g, '').trim();
+    if (!text) return null;
+    const num = Number(text);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function pickNumberInRange(value, low, high) {
+    const num = pickNumeric(value);
+    if (num === null) return null;
+    return Math.min(high, Math.max(low, num));
+  }
+
+  function scoreTrend(pick) {
+    // Trend signal: setup text + bias + higher-highs phrasing.
+    // Strong setups: Breakout Ready, Momentum Continuation, Trend Continuation, Stage 2.
+    // Weak setups: Avoid, Breakdown, Weak.
+    const setup = String(pick.setup || '').toLowerCase();
+    const bias = String(pick.bias || '').toLowerCase();
+    const notes = String(pick.notes || '').toLowerCase();
+    const signals = [];
+
+    let score = 55; // neutral baseline
+    const positives = ['breakout ready', 'momentum continuation', 'trend continuation', 'stage 2 uptrend', 'pullback to support', 'higher highs', 'higher lows'];
+    const negatives = ['avoid', 'breakdown', 'weak', 'downtrend', 'lower low', 'trend weakness', 'distribution'];
+
+    positives.forEach((phrase) => {
+      if (setup.includes(phrase) || notes.includes(phrase) || bias.includes(phrase)) {
+        score += 10;
+        signals.push(`positive: ${phrase}`);
+      }
+    });
+    negatives.forEach((phrase) => {
+      if (setup.includes(phrase) || notes.includes(phrase) || bias.includes(phrase)) {
+        score -= 14;
+        signals.push(`negative: ${phrase}`);
+      }
+    });
+
+    if (bias === 'buy' || bias === 'long') score += 6;
+    if (bias === 'sell' || bias === 'short') score -= 18;
+
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  function scoreVolume(pick) {
+    // Volume signal: explicit volume + setup text + delivery hints in notes.
+    let score = 50;
+    const signals = [];
+    const volume = pickNumeric(pick.volume);
+    if (volume !== null) {
+      if (volume >= 500000) {
+        score += 18;
+        signals.push(`volume ≥ 500k (${volume})`);
+      } else if (volume >= 100000) {
+        score += 10;
+        signals.push(`volume ≥ 100k (${volume})`);
+      } else if (volume >= 25000) {
+        score += 4;
+      } else {
+        score -= 6;
+        signals.push(`thin volume (${volume})`);
+      }
+    } else {
+      signals.push('volume unknown');
+    }
+    const notes = String(pick.notes || '').toLowerCase();
+    const setup = String(pick.setup || '').toLowerCase();
+    if (/volume confirm|volume support|strong volume|heavy volume|institutional volume/i.test(notes + ' ' + setup)) {
+      score += 12;
+      signals.push('volume confirmation in notes');
+    }
+    if (/weak volume|low volume|dry up|distribution/i.test(notes)) {
+      score -= 12;
+      signals.push('weak volume note');
+    }
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  function scoreRelativeStrength(pick) {
+    // We don't have index data here, so we infer RS from bias + setup + notes.
+    let score = 55;
+    const signals = [];
+    const text = (String(pick.setup || '') + ' ' + String(pick.notes || '') + ' ' + String(pick.bias || '')).toLowerCase();
+    if (/outperform|relative strength|strong relative|leading|rs >|rs above/i.test(text)) {
+      score += 22;
+      signals.push('outperforming note');
+    }
+    if (/laggard|underperform|weak relative|rs <|rs below/i.test(text)) {
+      score -= 22;
+      signals.push('laggard note');
+    }
+    if (/sector leader|sector top|sector outperform/i.test(text)) {
+      score += 10;
+    }
+    if (pick.source === 'AI') score += 4;
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  function scoreMomentum(pick) {
+    // RSI sweet spot 55–68, ADX > 25, MACD bullish, not overbought (>75).
+    let score = 60;
+    const signals = [];
+
+    const rsi = pickNumberInRange(pick.rsi, 0, 100);
+    if (rsi !== null) {
+      if (rsi >= 75) {
+        score -= 26;
+        signals.push(`RSI overbought (${rsi.toFixed(1)})`);
+      } else if (rsi >= 68) {
+        score -= 8;
+        signals.push(`RSI high (${rsi.toFixed(1)})`);
+      } else if (rsi >= 55) {
+        score += 18;
+        signals.push(`RSI bullish (${rsi.toFixed(1)})`);
+      } else if (rsi >= 45) {
+        score += 6;
+      } else if (rsi >= 30) {
+        score -= 8;
+        signals.push(`RSI weak (${rsi.toFixed(1)})`);
+      } else {
+        score -= 22;
+        signals.push(`RSI oversold/weak (${rsi.toFixed(1)})`);
+      }
+    }
+
+    const text = (String(pick.notes || '') + ' ' + String(pick.setup || '')).toLowerCase();
+    if (/macd bullish|macd crossover|adx > 25|adx above|strong adx|momentum build/i.test(text)) {
+      score += 8;
+      signals.push('MACD/ADX confirmation');
+    }
+    if (/macd bearish|macd divergence|adx < 20|weak adx|momentum fade/i.test(text)) {
+      score -= 14;
+      signals.push('MACD/ADX warning');
+    }
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  function scoreSector(pick) {
+    // No sector index data on the pick; use setup/notes hints.
+    let score = 55;
+    const signals = [];
+    const text = (String(pick.setup || '') + ' ' + String(pick.notes || '')).toLowerCase();
+    if (/sector strong|sector bullish|sector outperforming|sector leader|sector momentum/i.test(text)) {
+      score += 22;
+      signals.push('strong sector note');
+    }
+    if (/sector weak|sector laggard|sector underperform/i.test(text)) {
+      score -= 22;
+      signals.push('weak sector note');
+    }
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  function scoreRiskReward(pick) {
+    // R/R: target >= 2 × risk is preferred. Entry / stop / target are the inputs.
+    let score = 50;
+    const signals = [];
+    const entry = pickNumeric(pick.entry);
+    const target = pickNumeric(pick.target);
+    const stop = pickNumeric(pick.stop);
+    const riskRaw = pickNumeric(pick.risk);
+
+    let ratio = null;
+    if (entry && target && stop) {
+      const reward = Math.abs(target - entry);
+      const riskAmt = Math.abs(entry - stop);
+      if (riskAmt > 0) {
+        ratio = reward / riskAmt;
+        signals.push(`R:R = ${ratio.toFixed(2)}:1`);
+      }
+    } else if (riskRaw && target && entry) {
+      // `pick.risk` is sometimes a percentage risk score (0–10).
+      const reward = Math.abs(target - entry) / Math.max(entry, 1) * 100;
+      if (riskRaw > 0) {
+        ratio = reward / riskRaw;
+        signals.push(`R:R ≈ ${ratio.toFixed(2)}:1 (from risk %)`);
+      }
+    }
+
+    if (ratio !== null) {
+      if (ratio >= 3) {
+        score += 32;
+        signals.push('excellent R:R (≥ 3:1)');
+      } else if (ratio >= 2) {
+        score += 18;
+        signals.push('good R:R (≥ 2:1)');
+      } else if (ratio >= 1.5) {
+        score += 4;
+      } else if (ratio >= 1) {
+        score -= 12;
+        signals.push('marginal R:R');
+      } else {
+        score -= 28;
+        signals.push('poor R:R (< 1:1)');
+      }
+    } else {
+      signals.push('R:R could not be computed (need entry, stop, target)');
+      score -= 4;
+    }
+
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  function scoreNews(pick) {
+    // Trigger: positive wording in notes / warnings.
+    let score = 55;
+    const signals = [];
+    const positives = [
+      'big order', 'order win', 'contract win', 'earnings beat', 'beat estimate',
+      'government policy', 'policy boost', 'breakout after consolidation',
+      'upgrade', 'rating upgrade', 'buy rating', 'block deal'
+    ];
+    const negatives = [
+      'earnings miss', 'miss estimate', 'guidance cut', 'downgrade', 'rating cut',
+      'investigation', 'penalty', 'fraud', 'exit', 'plant shutdown', 'strike',
+      'weak management', 'pledging', 'regulatory action', 'tax hike', 'import duty'
+    ];
+    const text = (String(pick.notes || '') + ' ' + String(pick.warnings || '')).toLowerCase();
+    positives.forEach((phrase) => {
+      if (text.includes(phrase)) {
+        score += 12;
+        signals.push(`positive: ${phrase}`);
+      }
+    });
+    negatives.forEach((phrase) => {
+      if (text.includes(phrase)) {
+        score -= 18;
+        signals.push(`negative: ${phrase}`);
+      }
+    });
+    return { score: Math.max(0, Math.min(100, score)), signals };
+  }
+
+  const STOCK_SCORERS = {
+    trend: scoreTrend,
+    volume: scoreVolume,
+    relativeStrength: scoreRelativeStrength,
+    momentum: scoreMomentum,
+    sector: scoreSector,
+    riskReward: scoreRiskReward,
+    news: scoreNews
+  };
+
+  function scoreStockPick(pick) {
+    const breakdown = STOCK_SCORE_WEIGHTS.map(({ key, label, weight }) => {
+      const scorer = STOCK_SCORERS[key];
+      const result = scorer ? scorer(pick) : { score: 0, signals: [] };
+      const contribution = (result.score * weight) / STOCK_SCORE_TOTAL_WEIGHT;
+      return {
+        key,
+        label,
+        weight,
+        score: Math.round(result.score),
+        contribution: Number(contribution.toFixed(2)),
+        signals: result.signals || []
+      };
+    });
+    const total = breakdown.reduce((sum, item) => sum + item.contribution, 0);
+    return {
+      pick,
+      total: Math.round(total * 10) / 10,
+      breakdown
+    };
+  }
+
+  function scoreAllStockPicks(picks) {
+    const scored = (Array.isArray(picks) ? picks : [])
+      .map((pick) => scoreStockPick(pick))
+      .filter((entry) => entry.pick && entry.pick.symbol);
+    scored.sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      return String(a.pick.symbol).localeCompare(String(b.pick.symbol));
+    });
+    return scored;
+  }
+
+  function formatStockScoreBreakdownLine(entry) {
+    const signals = entry.breakdown
+      .flatMap((item) => item.signals.slice(0, 1))
+      .filter(Boolean);
+    const signalText = signals.length ? ` — ${signals.join(' · ')}` : '';
+    return `${entry.pick.symbol} (${entry.pick.bias || 'Watch'}) → ${entry.total}/100${signalText}`;
+  }
+
+  function buildStockScoreBreakdownMessage(entry) {
+    if (!entry) return 'No stock picks available to rank.';
+    const lines = [
+      `🏆 ${entry.pick.symbol} — ${entry.total}/100 (${entry.pick.bias || 'Watch'})`,
+      `Entry ${entry.pick.entry || '—'} · Target ${entry.pick.target || '—'} · Stop ${entry.pick.stop || '—'}`
+    ];
+    entry.breakdown.forEach((item) => {
+      lines.push(` • ${item.label} (${item.weight}%): ${item.score}/100 → +${item.contribution.toFixed(1)}`);
+    });
+    return lines.join('\n');
+  }
+
   function renderPickRows(rows) {
     return rows
       .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
@@ -1355,17 +1682,42 @@ const ui = {
 
   function renderPicks() {
     const picks = state.picks.filter((pick) => ui.pickFilter === 'All' || pick.source === ui.pickFilter);
+    const scored = scoreAllStockPicks(picks);
+    const scoredMap = new Map(scored.map((entry) => [entry.pick.id, entry]));
     const picksHtml = picks.length
       ? picks
           .slice(0, 10)
           .map((pick) => {
+            const score = scoredMap.get(pick.id);
+            const weightedScore = score ? score.total : null;
+            const weightedScoreLabel = weightedScore !== null ? `${Math.round(weightedScore)}/100` : '—';
+            const weightClass = weightedScore === null
+              ? ''
+              : weightedScore >= 75 ? 'score-strong'
+              : weightedScore >= 60 ? 'score-okay'
+              : 'score-weak';
+            const isOpen = ui.openBreakdownPickId === pick.id;
+            const breakdownHtml = score && isOpen
+              ? `<div class="pick-breakdown">
+                  <p class="pick-breakdown-title">Weighted score (Trend 25 / Volume 20 / RS 15 / Momentum 15 / Sector 10 / R:R 10 / News 5)</p>
+                  <ul>
+                    ${score.breakdown.map((item) => `
+                      <li>
+                        <span class="bd-label">${escapeHtml(item.label)}</span>
+                        <span class="bd-bar"><span class="bd-fill" style="width:${item.score}%; background:${item.score >= 70 ? '#63d297' : item.score >= 50 ? '#49d7e9' : '#ff5c7a'}"></span></span>
+                        <span class="bd-score">${item.score}/100 · ×${item.weight}% → +${item.contribution.toFixed(1)}</span>
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>`
+              : '';
             const rows = renderPickRows([
               ['Price', pick.price],
               ['Entry', pick.entry],
               ['Target 1', pick.target],
               ['Target 2', pick.target2],
               ['Stop', pick.stop],
-              ['Score', formatPickScore(pick.confidence)],
+              ['Source score', formatPickScore(pick.confidence)],
               ['Risk', pick.risk],
               ['Timing', pick.timing],
               ['Setup', pick.setup],
@@ -1375,7 +1727,13 @@ const ui = {
             return `<div class="pick-card">
               <div><strong>${escapeHtml(pick.symbol)}</strong><span>${escapeHtml(pick.source)}</span></div>
               <p>${escapeHtml(pick.bias || 'Watch')}</p>
+              <div class="pick-weighted-score">
+                <span class="weighted-label">Weighted</span>
+                <span class="weighted-value ${weightClass}">${escapeHtml(weightedScoreLabel)}</span>
+                <button type="button" class="breakdown-toggle" data-pick-breakdown="${escapeHtml(pick.id)}">${isOpen ? 'Hide' : 'Why?'}</button>
+              </div>
               <dl>${rows || '<dt>Status</dt><dd>Waiting for detail sync</dd>'}</dl>
+              ${breakdownHtml}
               ${pick.notes ? `<small class="pick-notes">${escapeHtml(pick.notes)}</small>` : ''}
               ${pick.warnings ? `<small class="pick-warning">${escapeHtml(pick.warnings)}</small>` : ''}
               <div class="pick-actions">
@@ -1389,8 +1747,10 @@ const ui = {
 
     return `<article class="panel picks-panel">
       <header class="panel-header">
-        <div><p class="eyebrow">Tomorrow's Picks</p><h2>${picks.length} stocks</h2></div>
+        <div><p class="eyebrow">Tomorrow's Picks</p><h2>${picks.length} stocks · top ${scored[0]?.pick.symbol || '—'} (${scored[0] ? Math.round(scored[0].total) : '—'}/100)</h2></div>
         <div class="button-row">
+          <button type="button" id="ai-recommend-pick">Best pick</button>
+          <button type="button" id="ai-rank-picks">Rank all</button>
           ${['All', 'AI', 'Manual']
             .map((option) => `<button type="button" class="${ui.pickFilter === option ? 'active' : ''}" data-pick-filter="${option}">${option}</button>`)
             .join('')}
@@ -2301,6 +2661,44 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         .join('\n');
     }
 
+    if (action === 'recommend_pick') {
+      const scored = scoreAllStockPicks(state.picks);
+      if (!scored.length) return 'You have no stock picks yet — sync picks first, then ask again.';
+      const top = scored[0];
+      const runners = scored.slice(1, 4).map((entry) => `${entry.pick.symbol} (${entry.total}/100)`).join(', ');
+      const lines = [
+        `🏆 Top pick: ${top.pick.symbol} — score ${top.total}/100 (${top.pick.bias || 'Watch'})`,
+        `Entry ${top.pick.entry || '—'} · Target ${top.pick.target || '—'} · Stop ${top.pick.stop || '—'}`,
+        ''
+      ];
+      top.breakdown.forEach((item) => {
+        lines.push(` • ${item.label} (${item.weight}%): ${item.score}/100 → +${item.contribution.toFixed(1)}`);
+      });
+      if (runners) {
+        lines.push('');
+        lines.push(`Runners-up: ${runners}`);
+      }
+      return lines.join('\n');
+    }
+
+    if (action === 'rank_picks') {
+      const scored = scoreAllStockPicks(state.picks);
+      if (!scored.length) return 'You have no stock picks yet.';
+      const lines = ['Ranked picks (weighted score):'];
+      scored.slice(0, 12).forEach((entry, index) => {
+        lines.push(`${index + 1}. ${entry.pick.symbol} — ${entry.total}/100 (${entry.pick.bias || 'Watch'})`);
+      });
+      return lines.join('\n');
+    }
+
+    if (action === 'pick_score_breakdown') {
+      const scored = scoreAllStockPicks(state.picks);
+      if (!scored.length) return 'You have no stock picks yet.';
+      const target = (payload.title || payload.symbol || '').toString().trim().toUpperCase();
+      const entry = scored.find((item) => item.pick.symbol.toUpperCase() === target) || scored[0];
+      return buildStockScoreBreakdownMessage(entry);
+    }
+
     if (action === 'create_album') {
       const name = String(payload.title || payload.content || '').trim();
       if (!name) return 'Album name is missing.';
@@ -2419,6 +2817,12 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     if (!messages) return;
     messages.innerHTML = `${renderAiMessages()}${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}`;
     messages.scrollTop = messages.scrollHeight;
+  }
+
+  function openAiAssistant() {
+    if (ui.aiOpen) return;
+    ui.aiOpen = true;
+    render();
   }
 
   async function sendAiMessage(text) {
@@ -2635,8 +3039,23 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
 
     byId('add-pick')?.addEventListener('click', addPick);
     byId('sync-picks')?.addEventListener('click', syncPicks);
+    byId('ai-recommend-pick')?.addEventListener('click', () => {
+      openAiAssistant();
+      sendAiMessage('best stock to buy');
+    });
+    byId('ai-rank-picks')?.addEventListener('click', () => {
+      openAiAssistant();
+      sendAiMessage('rank my stock picks');
+    });
     document.querySelectorAll('[data-pick-delete]').forEach((button) => {
       button.addEventListener('click', () => deletePick(button.dataset.pickDelete));
+    });
+    document.querySelectorAll('[data-pick-breakdown]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const id = button.dataset.pickBreakdown;
+        ui.openBreakdownPickId = ui.openBreakdownPickId === id ? '' : id;
+        render();
+      });
     });
 
     byId('add-habit')?.addEventListener('click', addHabit);

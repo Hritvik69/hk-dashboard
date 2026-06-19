@@ -24,12 +24,23 @@ Calendar: create_event, update_event, delete_event, list_events
 Growth: create_habit, delete_habit, check_habit, uncheck_habit, list_habits
 For check_habit: use "count" for how many boxes from day 1 (e.g. tick 8 boxes → count: 8). Use "date" for a single day. If habit already exists, use check_habit — never create_habit again.
 For create_habit with initial ticks: set count to number of boxes to pre-check.
-Picks: create_pick, delete_pick, list_picks
+Picks: create_pick, delete_pick, list_picks, recommend_pick, rank_picks, pick_score_breakdown
 Gallery: create_album, delete_album, list_albums, list_files
 Links: open_link, list_links
 Summary: list_dashboard
 Clarification: clarification (when confidence is below 80%)
 Chat: chat (for informational questions only)
+
+## STOCK RECOMMENDATION RULE
+
+When the user asks for the "best", "top", or "which stock should I buy" type question,
+ALWAYS return action "recommend_pick" (or "rank_picks" / "pick_score_breakdown").
+Do NOT use action "chat" to guess or invent a recommendation from text — these actions
+are computed deterministically using a weighted scoring rubric on the dashboard picks.
+
+recommend_pick → returns the single top-ranked pick
+rank_picks → returns the full ranked list
+pick_score_breakdown → returns the per-factor score breakdown for one symbol (or the top pick if no symbol given)
 
 ## OUTPUT RULE
 
@@ -50,6 +61,7 @@ For chat action: return ONE JSON object with action "chat" and the answer in "co
   "category": null,
   "status": null,
   "id": null,
+  "symbol": null,
   "success_message": "",
   "question": null,
   "count": null
@@ -167,6 +179,7 @@ function emptyAction(overrides = {}) {
     category: null,
     status: null,
     id: null,
+    symbol: null,
     success_message: null,
     question: null,
     count: null,
@@ -194,6 +207,24 @@ function parseLocalAction(message) {
   }
   if (/^(list|show)\s+(my\s+)?picks?$/i.test(text) || /^what picks/i.test(lower)) {
     return emptyAction({ action: 'list_picks', success_message: 'Picks listed.' });
+  }
+
+  if (/rank|sort|score|grade/.test(lower) && /pick|stock|share/i.test(lower)) {
+    return emptyAction({ action: 'rank_picks', success_message: 'Picks ranked by weighted score.' });
+  }
+
+  if (/(breakdown|why|explain|score breakdown)/i.test(lower) && /(pick|stock|[A-Z]{3,})/i.test(text)) {
+    const symbolMatch = text.match(/\b([A-Z][A-Z0-9.&-]{1,15})\b/);
+    return emptyAction({
+      action: 'pick_score_breakdown',
+      title: symbolMatch ? symbolMatch[1] : '',
+      success_message: 'Score breakdown ready.'
+    });
+  }
+
+  if (/(best|top|which|recommend|suggest|should i buy|buy now|pick one|top pick|kill it|tell me (?:a|the)?\s*(?:best|top)|one stock)/i.test(lower)
+      && /(stock|pick|share|buy|invest|trade|scalp|swing)/i.test(lower)) {
+    return emptyAction({ action: 'recommend_pick', success_message: 'Top pick selected using the weighted scoring rubric.' });
   }
   if (/what do i have|dashboard summary|list dashboard/i.test(lower)) {
     return emptyAction({ action: 'list_dashboard', success_message: 'Dashboard summary ready.' });
@@ -469,6 +500,7 @@ function parseAiContent(content) {
       category: null,
       status: null,
       id: null,
+      symbol: null,
       success_message: null,
       question: null
     };

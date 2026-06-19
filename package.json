@@ -13,7 +13,8 @@
     "build": "vite build",
     "prepreview": "node scripts/write-env.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "sync:odysseus": "node scripts/sync-odysseus.mjs"
+    "sync:odysseus": "node scripts/sync-odysseus.mjs",
+    "test:scorer": "node scripts/test-scorer.cjs"
   },
   "devDependencies": {
     "vite": "^8.0.16"

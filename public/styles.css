@@ -920,6 +920,136 @@ h3 {
   justify-content: flex-end;
 }
 
+.pick-weighted-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: -2px 0 4px;
+  border: 1px solid rgba(73, 215, 233, 0.22);
+  border-radius: 7px;
+  background: rgba(73, 215, 233, 0.06);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pick-weighted-score .weighted-label {
+  color: var(--muted);
+}
+
+.pick-weighted-score .weighted-value {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(73, 215, 233, 0.28);
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.pick-weighted-score .weighted-value.score-strong {
+  background: rgba(99, 210, 151, 0.32);
+  color: #d6ffe7;
+}
+
+.pick-weighted-score .weighted-value.score-okay {
+  background: rgba(73, 215, 233, 0.32);
+  color: #d6f4ff;
+}
+
+.pick-weighted-score .weighted-value.score-weak {
+  background: rgba(255, 92, 122, 0.32);
+  color: #ffd5dd;
+}
+
+.pick-weighted-score .breakdown-toggle {
+  min-height: 26px;
+  padding: 0 10px;
+  color: var(--cyan);
+  border: 1px solid rgba(73, 215, 233, 0.34);
+  border-radius: 6px;
+  background: rgba(73, 215, 233, 0.08);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pick-weighted-score .breakdown-toggle:hover {
+  border-color: rgba(73, 215, 233, 0.7);
+  background: rgba(73, 215, 233, 0.16);
+}
+
+.pick-breakdown {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(73, 215, 233, 0.18);
+  border-radius: 8px;
+  background: rgba(7, 11, 22, 0.6);
+}
+
+.pick-breakdown-title {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pick-breakdown ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pick-breakdown li {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pick-breakdown .bd-label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.pick-breakdown .bd-bar {
+  display: block;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(158, 181, 219, 0.18);
+  overflow: hidden;
+}
+
+.pick-breakdown .bd-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 200ms ease;
+}
+
+.pick-breakdown .bd-score {
+  color: var(--muted);
+  font-family:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .pick-link,
 .remove-button {
   display: inline-grid;

@@ -46,7 +46,11 @@ const ui = {
     editingNoteId: '',
     openBreakdownPickId: '',
     aiOpen: false,
-    aiLoading: false
+    aiLoading: false,
+    // Personal Growth — view state only, never persisted.
+    growthExpanded: new Set(),
+    growthEditingImprovementId: '',
+    growthDraggingAxis: ''
   };
 
   // Session-only chat memory. Never saved to localStorage or Supabase.
@@ -186,9 +190,92 @@ const ui = {
       picks: [],
       albums: [defaultAlbum(now)],
       photos: [],
+      skills: seedGrowthSkills(),
       growthStartDate: todayKey(),
       updatedAt: now
     };
+  }
+
+  // Personal Growth — 7 life dimensions. Stable ids drive the radar axes.
+  // Order matters: it's the clockwise axis order of the radar chart.
+  const GROWTH_SKILLS = [
+    { id: 'communication', title: 'Communication', icon: '💬', color: '#49d7e9' },
+    { id: 'overall', title: 'Overall Skills', icon: '🎯', color: '#63d297' },
+    { id: 'personality', title: 'Personality', icon: '🧠', color: '#8b5cf6' },
+    { id: 'emotions', title: 'Emotions', icon: '❤️', color: '#ff5c7a' },
+    { id: 'knowledge', title: 'Knowledge', icon: '📚', color: '#f2b84b' },
+    { id: 'problem-solving', title: 'Problem Solving', icon: '🧩', color: '#a78bfa' },
+    { id: 'money', title: 'Financial Skills', icon: '💰', color: '#81e6d9' }
+  ];
+  const GROWTH_IMPROVEMENT_PRIORITIES = ['Low', 'Medium', 'High'];
+  const GROWTH_HISTORY_CAP = 100;
+
+  function normalizeImprovement(item) {
+    const priority = GROWTH_IMPROVEMENT_PRIORITIES.includes(item?.priority) ? item.priority : 'Normal';
+    return {
+      id: item?.id || uid('improvement'),
+      title: String(item?.title || '').trim(),
+      completed: Boolean(item?.completed || item?.done),
+      priority,
+      deadline: isDateKey(item?.deadline) ? item.deadline : '',
+      createdAt: item?.createdAt || new Date().toISOString(),
+      // Future-proofed (unused by core UI today, but reserved so later features
+      // — streaks, per-task notes, achievements — need no migration).
+      notes: String(item?.notes || ''),
+      streak: Math.max(0, Number(item?.streak) || 0),
+      lastCompleted: item?.lastCompleted || ''
+    };
+  }
+
+  function normalizeSkill(input) {
+    const base = GROWTH_SKILLS.find((def) => def.id === input?.id) || GROWTH_SKILLS[0];
+    const value = Math.max(0, Math.min(100, Math.round(Number(input?.value) || 0)));
+    const history = (Array.isArray(input?.history) ? input.history : [])
+      .filter((entry) => Number.isFinite(Number(entry?.value)))
+      .map((entry) => ({ time: Number(entry.time) || Date.now(), value: Math.max(0, Math.min(100, Math.round(Number(entry.value)))) }))
+      .sort((a, b) => a.time - b.time)
+      .slice(-GROWTH_HISTORY_CAP);
+    return {
+      id: base.id,
+      title: base.title,
+      icon: base.icon,
+      color: base.color,
+      value,
+      notes: String(input?.notes || ''),
+      improvements: (Array.isArray(input?.improvements) ? input.improvements : []).map(normalizeImprovement),
+      history,
+      updatedAt: input?.updatedAt || new Date().toISOString()
+    };
+  }
+
+  function seedGrowthSkills() {
+    return GROWTH_SKILLS.map((def) => ({
+      id: def.id,
+      title: def.title,
+      icon: def.icon,
+      color: def.color,
+      value: 50,
+      notes: '',
+      improvements: [],
+      history: [],
+      updatedAt: new Date().toISOString()
+    }));
+  }
+
+  function normalizeSkills(input) {
+    const byId = new Map();
+    (Array.isArray(input) ? input : []).forEach((entry) => {
+      const normalized = normalizeSkill(entry);
+      byId.set(normalized.id, normalized);
+    });
+    // Always return all 7 dimensions in canonical order, merging any persisted
+    // values over the seed defaults.
+    return GROWTH_SKILLS.map((def) => byId.get(def.id) || normalizeSkill({ id: def.id, value: 50 }));
+  }
+
+  function overallGrowthLevel(skills) {
+    const list = Array.isArray(skills) && skills.length ? skills : seedGrowthSkills();
+    return Math.round(list.reduce((sum, skill) => sum + (Number(skill.value) || 0), 0) / list.length);
   }
 
   function mergeDashboard(input) {
@@ -211,6 +298,7 @@ const ui = {
       picks: Array.isArray(data.picks) ? data.picks : defaults.picks,
       albums,
       photos,
+      skills: Array.isArray(data.skills) ? normalizeSkills(data.skills) : defaults.skills,
       growthStartDate: data.growthStartDate || inferGrowthStartDate(data.habits) || defaults.growthStartDate,
       updatedAt: data.updatedAt || defaults.updatedAt
     });
@@ -362,6 +450,23 @@ const ui = {
       month: 'short',
       day: 'numeric'
     });
+  }
+
+  function relativeTime(iso) {
+    const then = Date.parse(iso);
+    if (!then) return 'never';
+    const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (seconds < 60) return 'just now';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.round(hours / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    const weeks = Math.round(days / 7);
+    if (weeks < 5) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+    const months = Math.round(days / 30);
+    return `${months} month${months === 1 ? '' : 's'} ago`;
   }
 
   function addDaysKey(startKey, offset) {
@@ -812,6 +917,16 @@ const ui = {
       drafts[`note-code-input:${el.dataset.noteCodeInput}`] = el.value;
     });
 
+    document.querySelectorAll('[data-skill-notes]').forEach((el) => {
+      drafts[`skill-notes:${el.dataset.skillNotes}`] = el.value;
+    });
+    document.querySelectorAll('[data-growth-imp-input]').forEach((el) => {
+      drafts[`growth-imp-input:${el.dataset.growthImpInput}`] = el.value;
+    });
+    document.querySelectorAll('[data-growth-imp-edit]').forEach((el) => {
+      drafts[`growth-imp-edit:${el.dataset.growthImpEdit}`] = el.value;
+    });
+
     const active = document.activeElement;
     let focus = null;
     if (isEditableElement(active)) {
@@ -821,6 +936,9 @@ const ui = {
         noteTitle: active.dataset?.noteTitleInput || '',
         noteCodeLang: active.dataset?.noteCodeLang || '',
         noteCodeInput: active.dataset?.noteCodeInput || '',
+        skillNotes: active.dataset?.skillNotes || '',
+        growthImpInput: active.dataset?.growthImpInput || '',
+        growthImpEdit: active.dataset?.growthImpEdit || '',
         start: active.selectionStart,
         end: active.selectionEnd
       };
@@ -844,7 +962,10 @@ const ui = {
         'note-body': `[data-note-body-input="${id}"]`,
         'note-title': `[data-note-title-input="${id}"]`,
         'note-code-lang': `[data-note-code-lang="${id}"]`,
-        'note-code-input': `[data-note-code-input="${id}"]`
+        'note-code-input': `[data-note-code-input="${id}"]`,
+        'skill-notes': `[data-skill-notes="${id}"]`,
+        'growth-imp-input': `[data-growth-imp-input="${id}"]`,
+        'growth-imp-edit': `[data-growth-imp-edit="${id}"]`
       };
       const el = document.querySelector(selectors[kind] || '');
       if (el && 'value' in el) el.value = value;
@@ -859,6 +980,9 @@ const ui = {
     else if (focus.noteTitle) el = document.querySelector(`[data-note-title-input="${focus.noteTitle}"]`);
     else if (focus.noteCodeLang) el = document.querySelector(`[data-note-code-lang="${focus.noteCodeLang}"]`);
     else if (focus.noteCodeInput) el = document.querySelector(`[data-note-code-input="${focus.noteCodeInput}"]`);
+    else if (focus.skillNotes) el = document.querySelector(`[data-skill-notes="${focus.skillNotes}"]`);
+    else if (focus.growthImpInput) el = document.querySelector(`[data-growth-imp-input="${focus.growthImpInput}"]`);
+    else if (focus.growthImpEdit) el = document.querySelector(`[data-growth-imp-edit="${focus.growthImpEdit}"]`);
 
     if (!el) return;
     el.focus({ preventScroll: true });
@@ -881,6 +1005,7 @@ const ui = {
       picks: state.picks,
       photos: state.photos,
       albums: state.albums,
+      skills: state.skills,
       notice,
       editingNoteId: ui.editingNoteId,
       selectedDate: ui.selectedDate,
@@ -2317,36 +2442,395 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     </article>`;
   }
 
-  function renderAccount() {
-    const cloudReady = Boolean(client);
-    const authHtml = cloudReady
-      ? session
-        ? `<div class="account-box">
-            <div><p>Signed in as ${escapeHtml(session.user.email)}</p><small>${escapeHtml(syncText)}</small></div>
-            <div class="button-row"><button type="button" id="sync-now">Sync now</button><button type="button" id="purge-orphans">Purge orphan files</button><button type="button" id="sign-out">Sign out</button></div>
-          </div>`
-        : `<form class="account-form" id="sign-in-form"><input id="email" type="email" placeholder="Email for cloud sync" required /><button type="submit">Send link</button></form>`
-      : '<p class="muted-copy">Local saving is active. Add Supabase env vars on Vercel for cloud login and cross-device sync.</p>';
-    const syncMode = session ? 'Dashboard auto-syncs every 20 seconds' : 'Sign in once to sync notes, tasks, files, and habits';
-    const fileMode = session ? 'Files upload to private Supabase Storage' : 'Files stay in this browser until sign in';
+  // ─── Personal Growth Dashboard ────────────────────────────────────────────
+  // Radar geometry. viewBox is square; center + radius in SVG user units.
+  const GROWTH_RADAR = { cx: 150, cy: 150, radius: 116, labelRadius: 138 };
 
-    return `<article class="panel account-panel">
-      <header class="panel-header">
-        <div><p class="eyebrow">Save &amp; Access</p><h2>${escapeHtml(statusText)}</h2></div>
-        <span class="icon large">ID</span>
-      </header>
-      ${authHtml}
-      <div class="backup-row">
-        <button type="button" id="export-json">Export JSON</button>
-        <label class="file-button">Import JSON<input id="import-json" type="file" accept="application/json" /></label>
-      </div>
-      <div class="connection-list">
-        <span><span class="icon">DB</span> ${escapeHtml(syncMode)}</span>
-        <span><span class="icon">ST</span> Stock picks auto-refresh from Supabase</span>
-        <span><span class="icon">FL</span> ${escapeHtml(fileMode)}</span>
+  function growthAxisAngle(index) {
+    // Start at top (-90deg), go clockwise.
+    return (-90 + (360 / GROWTH_SKILLS.length) * index) * (Math.PI / 180);
+  }
+
+  function growthPoint(index, value) {
+    const angle = growthAxisAngle(index);
+    const r = (Math.max(0, Math.min(100, Number(value) || 0)) / 100) * GROWTH_RADAR.radius;
+    return {
+      x: GROWTH_RADAR.cx + r * Math.cos(angle),
+      y: GROWTH_RADAR.cy + r * Math.sin(angle)
+    };
+  }
+
+  function growthLabelPoint(index) {
+    const angle = growthAxisAngle(index);
+    return {
+      x: GROWTH_RADAR.cx + GROWTH_RADAR.labelRadius * Math.cos(angle),
+      y: GROWTH_RADAR.cy + GROWTH_RADAR.labelRadius * Math.sin(angle)
+    };
+  }
+
+  // Map a pointer position (in SVG user units) back to a 0–100 value for a given axis.
+  function growthValueFromPointer(index, svgX, svgY) {
+    const angle = growthAxisAngle(index);
+    const dx = svgX - GROWTH_RADAR.cx;
+    const dy = svgY - GROWTH_RADAR.cy;
+    // Project the pointer vector onto the axis direction.
+    const projected = dx * Math.cos(angle) + dy * Math.sin(angle);
+    return Math.max(0, Math.min(100, Math.round((projected / GROWTH_RADAR.radius) * 100)));
+  }
+
+  function growthSkillById(id) {
+    return (state.skills || []).find((skill) => skill.id === id);
+  }
+
+  // Update a skill level WITHOUT a full re-render. Used during slider input and
+  // radar drag, where re-rendering would destroy focus and cause jank. Instead we
+  // mutate state in place, persist (localStorage + debounced cloud), and repaint
+  // only the radar visuals from the single source of truth. A history entry is
+  // appended (capped) so future charts/streaks/AI analysis need no migration.
+  function updateSkillValue(id, rawValue) {
+    const value = Math.max(0, Math.min(100, Math.round(Number(rawValue) || 0)));
+    state = mergeDashboard({
+      ...state,
+      skills: (state.skills || []).map((skill) => {
+        if (skill.id !== id || skill.value === value) return skill;
+        const history = [...skill.history, { time: Date.now(), value }].slice(-GROWTH_HISTORY_CAP);
+        return { ...skill, value, history, updatedAt: new Date().toISOString() };
+      })
+    });
+    state.updatedAt = new Date().toISOString();
+    scheduleSave();
+    refreshGrowthVisuals();
+  }
+
+  function mutateSkill(skillId, recipe) {
+    mutate((current) => ({
+      ...current,
+      skills: (current.skills || []).map((skill) => (skill.id === skillId ? recipe(skill) : skill))
+    }));
+  }
+
+  function toggleGrowthSkill(skillId) {
+    if (ui.growthExpanded.has(skillId)) ui.growthExpanded.delete(skillId);
+    else ui.growthExpanded.add(skillId);
+    render();
+  }
+
+  function expandGrowthSkill(skillId) {
+    if (!ui.growthExpanded.has(skillId)) ui.growthExpanded.add(skillId);
+    render();
+    document.querySelector(`.growth-skill-card[data-skill="${skillId}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  // Save the notes textarea for a skill. Debounced + idle-callback aware so typing
+  // is never blocked. Reads straight from the DOM element (drafts preserve it
+  // across renders).
+  let skillNotesTimer = null;
+  function scheduleSkillNotesSave(skillId) {
+    clearTimeout(skillNotesTimer);
+    const run = () => {
+      const el = document.querySelector(`[data-skill-notes="${skillId}"]`);
+      if (!el) return;
+      mutateSkill(skillId, (skill) => ({ ...skill, notes: el.value, updatedAt: new Date().toISOString() }));
+    };
+    if ('requestIdleCallback' in window) {
+      skillNotesTimer = window.requestIdleCallback(run, { timeout: 1200 });
+    } else {
+      skillNotesTimer = setTimeout(run, 800);
+    }
+  }
+
+  function saveSkillNotesNow(skillId) {
+    const el = document.querySelector(`[data-skill-notes="${skillId}"]`);
+    if (!el) return;
+    mutateSkill(skillId, (skill) => ({ ...skill, notes: el.value, updatedAt: new Date().toISOString() }));
+    setNotice('Notes saved.');
+  }
+
+  function addGrowthImprovement(skillId) {
+    const input = document.querySelector(`[data-growth-imp-input="${skillId}"]`);
+    const title = String(input?.value || '').trim();
+    if (!title) return;
+    if (input) input.value = '';
+    mutateSkill(skillId, (skill) => ({
+      ...skill,
+      improvements: [
+        { id: uid('improvement'), title, completed: false, priority: 'Medium', deadline: '', createdAt: new Date().toISOString(), notes: '', streak: 0, lastCompleted: '' },
+        ...(skill.improvements || [])
+      ]
+    }));
+  }
+
+  function toggleGrowthImprovement(skillId, improvementId) {
+    mutateSkill(skillId, (skill) => ({
+      ...skill,
+      improvements: (skill.improvements || []).map((item) =>
+        item.id === improvementId
+          ? { ...item, completed: !item.completed, lastCompleted: !item.completed ? new Date().toISOString() : item.lastCompleted }
+          : item
+      )
+    }));
+  }
+
+  function deleteGrowthImprovement(skillId, improvementId) {
+    if (!confirmDelete('this improvement')) return;
+    mutateSkill(skillId, (skill) => ({
+      ...skill,
+      improvements: (skill.improvements || []).filter((item) => item.id !== improvementId)
+    }));
+  }
+
+  function startEditingGrowthImprovement(improvementId) {
+    ui.growthEditingImprovementId = improvementId;
+    render();
+  }
+
+  function cancelEditingGrowthImprovement() {
+    ui.growthEditingImprovementId = '';
+    render();
+  }
+
+  function saveGrowthImprovementEdit(skillId, improvementId) {
+    const editEl = document.querySelector(`[data-growth-imp-edit="${improvementId}"]`);
+    const title = String(editEl?.value || '').trim();
+    if (!title) return;
+    mutateSkill(skillId, (skill) => ({
+      ...skill,
+      improvements: (skill.improvements || []).map((item) =>
+        item.id === improvementId ? { ...item, title } : item
+      )
+    }));
+    ui.growthEditingImprovementId = '';
+    render();
+  }
+
+  function setGrowthImprovementPriority(skillId, improvementId, priority) {
+    if (!GROWTH_IMPROVEMENT_PRIORITIES.includes(priority)) return;
+    mutateSkill(skillId, (skill) => ({
+      ...skill,
+      improvements: (skill.improvements || []).map((item) => (item.id === improvementId ? { ...item, priority } : item))
+    }));
+  }
+
+  function setGrowthImprovementDeadline(skillId, improvementId, deadline) {
+    mutateSkill(skillId, (skill) => ({
+      ...skill,
+      improvements: (skill.improvements || []).map((item) => (item.id === improvementId ? { ...item, deadline: isDateKey(deadline) ? deadline : '' } : item))
+    }));
+  }
+
+  function moveGrowthImprovement(skillId, improvementId, direction) {
+    mutateSkill(skillId, (skill) => {
+      const list = [...(skill.improvements || [])];
+      const index = list.findIndex((item) => item.id === improvementId);
+      if (index === -1) return skill;
+      const target = index + direction;
+      if (target < 0 || target >= list.length) return skill;
+      [list[index], list[target]] = [list[target], list[index]];
+      return { ...skill, improvements: list };
+    });
+  }
+
+  function reorderGrowthImprovement(skillId, dragId, dropId) {
+    if (!dragId || dragId === dropId) return;
+    mutateSkill(skillId, (skill) => {
+      const list = [...(skill.improvements || [])];
+      const from = list.findIndex((item) => item.id === dragId);
+      const to = list.findIndex((item) => item.id === dropId);
+      if (from === -1 || to === -1) return skill;
+      const [moved] = list.splice(from, 1);
+      list.splice(to, 0, moved);
+      return { ...skill, improvements: list };
+    });
+  }
+
+  // Single source of truth: repaint radar polygon, handles, axis level labels and
+  // the overall bar from state.skills WITHOUT a full re-render. Called during
+  // slider input / radar drag so the UI stays live without losing focus.
+  function refreshGrowthVisuals() {
+    const skills = state.skills || [];
+    const points = skills.map((skill, index) => growthPoint(index, skill.value));
+    const polygon = document.getElementById('growth-radar-polygon');
+    if (polygon) polygon.setAttribute('points', points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '));
+
+    skills.forEach((skill, index) => {
+      const pt = growthPoint(index, skill.value);
+      const handle = document.querySelector(`.growth-handle[data-skill-axis="${skill.id}"]`);
+      if (handle) {
+        handle.setAttribute('cx', pt.x.toFixed(1));
+        handle.setAttribute('cy', pt.y.toFixed(1));
+      }
+      const level = document.getElementById(`growth-level-${skill.id}`);
+      if (level) level.textContent = `Level ${skill.value}`;
+      const slider = document.querySelector(`.growth-slider[data-skill-slider="${skill.id}"]`);
+      if (slider && document.activeElement !== slider) slider.value = String(skill.value);
+      // Live-update the per-card readouts too, so the panel feels fully reactive
+      // without a full re-render.
+      const sliderValue = document.querySelector(`.growth-skill-card[data-skill="${skill.id}"] .growth-slider-value`);
+      if (sliderValue) sliderValue.textContent = String(skill.value);
+      const badge = document.querySelector(`.growth-skill-card[data-skill="${skill.id}"] .growth-skill-level-badge`);
+      if (badge) badge.textContent = String(skill.value);
+      const sub = document.querySelector(`.growth-skill-card[data-skill="${skill.id}"] .growth-skill-sub`);
+      if (sub) {
+        const openImps = (skill.improvements || []).filter((item) => !item.completed).length;
+        sub.textContent = `Level ${skill.value} · ${openImps} open task${openImps !== 1 ? 's' : ''}`;
+      }
+    });
+
+    const overall = overallGrowthLevel(skills);
+    const overallFill = document.getElementById('growth-overall-fill');
+    if (overallFill) overallFill.style.width = `${overall}%`;
+    const overallLabel = document.getElementById('growth-overall-label');
+    if (overallLabel) overallLabel.textContent = `Overall Level: ${overall} / 100`;
+  }
+
+  function renderGrowthRadar() {
+    const skills = state.skills || [];
+    const gridRings = [25, 50, 75, 100];
+    const rings = gridRings
+      .map((ring) => {
+        const pts = GROWTH_SKILLS.map((_, index) => growthPoint(index, ring)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+        return `<polygon class="growth-grid-ring" points="${pts.join(' ')}" />`;
+      })
+      .join('');
+
+    const spokes = GROWTH_SKILLS
+      .map((_, index) => {
+        const end = growthPoint(index, 100);
+        return `<line class="growth-grid-spoke" x1="${GROWTH_RADAR.cx}" y1="${GROWTH_RADAR.cy}" x2="${end.x.toFixed(1)}" y2="${end.y.toFixed(1)}" />`;
+      })
+      .join('');
+
+    const polygonPoints = skills.map((skill, index) => growthPoint(index, skill.value)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+    const handles = skills
+      .map((skill, index) => {
+        const pt = growthPoint(index, skill.value);
+        return `<circle class="growth-handle" data-skill-axis="${escapeHtml(skill.id)}" data-skill-title="${escapeHtml(skill.title)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="8" />`;
+      })
+      .join('');
+
+    const labels = GROWTH_SKILLS.map((def, index) => {
+      const skill = skills.find((item) => item.id === def.id) || { value: 0, updatedAt: '' };
+      const lp = growthLabelPoint(index);
+      const anchor = Math.abs(lp.x - GROWTH_RADAR.cx) < 12 ? 'middle' : lp.x > GROWTH_RADAR.cx ? 'start' : 'end';
+      return `<g class="growth-axis-label" data-skill-axis-label="${escapeHtml(def.id)}">
+          <text class="growth-axis-title" x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" text-anchor="${anchor}">${def.icon} ${escapeHtml(def.title)}</text>
+          <text class="growth-axis-level" id="growth-level-${escapeHtml(def.id)}" x="${lp.x.toFixed(1)}" y="${(lp.y + 16).toFixed(1)}" text-anchor="${anchor}">Level ${skill.value}</text>
+        </g>`;
+    }).join('');
+
+    return `<svg class="growth-radar" viewBox="0 0 300 300" role="img" aria-label="Personal growth radar chart">
+        ${rings}
+        ${spokes}
+        <polygon class="growth-fill" id="growth-radar-polygon" points="${escapeHtml(polygonPoints)}" />
+        ${handles}
+        ${labels}
+      </svg>`;
+  }
+
+  function renderGrowthImprovement(skill, item) {
+    const isEditing = ui.growthEditingImprovementId === item.id;
+    const priorityClass = `priority-${String(item.priority).toLowerCase()}`;
+    const dueLabel = item.deadline ? ` · due ${formatDisplayDate(item.deadline)}` : '';
+    if (isEditing) {
+      return `<div class="growth-imp-item editing">
+          <input class="growth-imp-edit" data-growth-imp-edit="${escapeHtml(item.id)}" value="${escapeHtml(item.title)}" placeholder="Improvement..." />
+          <div class="growth-imp-actions">
+            <button type="button" class="remove-button" data-growth-imp-cancel="${escapeHtml(item.id)}">Cancel</button>
+            <button type="button" class="save-button" data-growth-imp-save="${escapeHtml(item.id)}" data-skill="${escapeHtml(skill.id)}">Save</button>
+          </div>
+        </div>`;
+    }
+    return `<div class="growth-imp-item ${item.completed ? 'done' : ''} ${priorityClass}" draggable="true" data-growth-imp="${escapeHtml(item.id)}" data-skill="${escapeHtml(skill.id)}">
+        <button type="button" class="growth-imp-check ${item.completed ? 'checked' : ''}" data-growth-imp-toggle="${escapeHtml(item.id)}" data-skill="${escapeHtml(skill.id)}" aria-label="Toggle ${escapeHtml(item.title)}">${item.completed ? '✓' : ''}</button>
+        <div class="growth-imp-body">
+          <span class="growth-imp-title">${escapeHtml(item.title)}</span>
+          <span class="growth-imp-meta">
+            <span class="growth-priority-dot ${priorityClass}"></span>${escapeHtml(item.priority)}${escapeHtml(dueLabel)}
+          </span>
+        </div>
+        <div class="growth-imp-actions">
+          <button type="button" class="growth-move" data-growth-imp-up="${escapeHtml(item.id)}" data-skill="${escapeHtml(skill.id)}" aria-label="Move up">↑</button>
+          <button type="button" class="growth-move" data-growth-imp-down="${escapeHtml(item.id)}" data-skill="${escapeHtml(skill.id)}" aria-label="Move down">↓</button>
+          <button type="button" class="edit-button" data-growth-imp-edit-btn="${escapeHtml(item.id)}">Edit</button>
+          <button type="button" class="remove-button" data-growth-imp-delete="${escapeHtml(item.id)}" data-skill="${escapeHtml(skill.id)}">Delete</button>
+        </div>
+      </div>`;
+  }
+
+  function renderGrowthSkillCard(skill) {
+    const expanded = ui.growthExpanded.has(skill.id);
+    const openImps = (skill.improvements || []).filter((item) => !item.completed).length;
+    const styleAttr = ` style="--skill-color:${escapeHtml(skill.color)}"`;
+    const improvementsHtml = (skill.improvements || []).length
+      ? (skill.improvements || []).map((item) => renderGrowthImprovement(skill, item)).join('')
+      : '<p class="empty">No improvements yet</p>';
+    return `<article class="growth-skill-card ${expanded ? 'expanded' : ''}" data-skill="${escapeHtml(skill.id)}"${styleAttr}>
+      <button type="button" class="growth-skill-head" data-skill-toggle="${escapeHtml(skill.id)}">
+        <span class="growth-skill-icon">${skill.icon}</span>
+        <span class="growth-skill-info">
+          <strong>${escapeHtml(skill.title)}</strong>
+          <span class="growth-skill-sub">Level ${skill.value} · ${openImps} open task${openImps !== 1 ? 's' : ''}</span>
+        </span>
+        <span class="growth-skill-level-badge" style="background:${escapeHtml(skill.color)}22;color:${escapeHtml(skill.color)}">${skill.value}</span>
+        <span class="growth-chevron">${expanded ? '−' : '+'}</span>
+      </button>
+      <div class="growth-skill-body">
+        <div class="growth-slider-row">
+          <input type="range" min="0" max="100" value="${skill.value}" class="growth-slider" data-skill-slider="${escapeHtml(skill.id)}" aria-label="${escapeHtml(skill.title)} level" />
+          <span class="growth-slider-value" style="color:${escapeHtml(skill.color)}">${skill.value}</span>
+        </div>
+        <div class="growth-notes-block">
+          <label class="growth-notes-label">Notes</label>
+          <textarea class="growth-notes" data-skill-notes="${escapeHtml(skill.id)}" placeholder="Reflections, things to remember...">${escapeHtml(skill.notes || '')}</textarea>
+          <div class="growth-notes-actions">
+            <button type="button" class="save-button" data-skill-notes-save="${escapeHtml(skill.id)}">Save notes</button>
+          </div>
+        </div>
+        <div class="growth-imp-block">
+          <div class="growth-imp-head">
+            <strong>Things to Improve</strong>
+          </div>
+          <div class="growth-imp-add">
+            <input class="growth-imp-input" data-growth-imp-input="${escapeHtml(skill.id)}" placeholder="Add an improvement..." />
+            <button type="button" id="growth-imp-add-${escapeHtml(skill.id)}" data-skill="${escapeHtml(skill.id)}">Add</button>
+          </div>
+          <div class="growth-imp-list">${improvementsHtml}</div>
+        </div>
       </div>
     </article>`;
   }
+
+  function renderPersonalGrowth() {
+    const skills = state.skills || [];
+    const overall = overallGrowthLevel(skills);
+    const radarHtml = renderGrowthRadar();
+    const cardsHtml = skills.map((skill) => renderGrowthSkillCard(skill)).join('');
+
+    return `<article class="panel growth-dashboard-panel">
+      <header class="panel-header">
+        <div><p class="eyebrow">Personal Growth</p><h2>Growth Dashboard</h2></div>
+        <span class="icon large" style="color:#63d297;border-color:#63d29740;background:#63d29714">GY</span>
+      </header>
+      <p class="growth-intro">Track your progress across 7 dimensions of life. Drag the radar points or use each card's slider — everything saves automatically.</p>
+      <div class="growth-top">
+        <div class="growth-radar-wrap">${radarHtml}</div>
+        <div class="growth-overall">
+          <p class="eyebrow">Overall Life Progress</p>
+          <div class="growth-overall-bar"><div class="growth-overall-fill" id="growth-overall-fill" style="width:${overall}%"></div></div>
+          <p class="growth-overall-label" id="growth-overall-label">Overall Level: ${overall} / 100</p>
+          <p class="growth-overall-hint">Average of all 7 dimensions.</p>
+        </div>
+      </div>
+      <div class="growth-cards">${cardsHtml}</div>
+    </article>`;
+  }
+
+  // renderAccount() was removed: the visible Cloud Sync / sign-in panel has been
+  // replaced by renderPersonalGrowth(). The underlying sync engine (signIn,
+  // signOut, syncCloudNow, saveCloud, bootCloud, startCloudSync, exportJson,
+  // importJson, purgeOrphanCloudFiles) is kept intact so data still auto-syncs
+  // across devices silently — only the UI surface is gone.
 
   function isDashboardUnlocked() {
     try {
@@ -3412,7 +3896,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         ${renderPicks()}
         ${renderGrowth()}
         ${renderGallery()}
-        ${renderAccount()}
+        ${renderPersonalGrowth()}
         ${renderStoragePanel()}
       </section>
     </main>
@@ -3598,27 +4082,158 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
     document.querySelector('.file-modal')?.addEventListener('click', (event) => {
       if (event.target.classList.contains('file-modal')) closeFile();
     });
-    byId('export-json')?.addEventListener('click', exportJson);
-    byId('import-json')?.addEventListener('change', importJson);
-    byId('sync-now')?.addEventListener('click', () => {
-      syncCloudNow({ force: true, silent: false }).catch((error) => {
-        setNotice(error.message || 'Sync failed.');
+
+    bindGrowthEvents();
+  }
+
+  // Personal Growth events. Attached fresh each render. Radar drag uses pointer
+  // events so it works for both mouse and touch without a library.
+  function bindGrowthEvents() {
+    // Expand / collapse cards.
+    document.querySelectorAll('[data-skill-toggle]').forEach((button) => {
+      button.addEventListener('click', () => toggleGrowthSkill(button.dataset.skillToggle));
+    });
+
+    // Sliders — live update state + repaint visuals without a full re-render
+    // (keeps the thumb focus and avoids re-render jank).
+    document.querySelectorAll('[data-skill-slider]').forEach((slider) => {
+      slider.addEventListener('input', () => {
+        updateSkillValue(slider.dataset.skillSlider, slider.value);
       });
     });
 
-    byId('purge-orphans')?.addEventListener('click', () => {
-      purgeOrphanCloudFiles().catch((error) => {
-        setNotice(error.message || 'Purge failed.');
+    // Notes — debounced auto-save + explicit save button.
+    document.querySelectorAll('[data-skill-notes]').forEach((textarea) => {
+      textarea.addEventListener('input', () => scheduleSkillNotesSave(textarea.dataset.skillNotes));
+    });
+    document.querySelectorAll('[data-skill-notes-save]').forEach((button) => {
+      button.addEventListener('click', () => saveSkillNotesNow(button.dataset.skillNotesSave));
+    });
+
+    // Add improvement.
+    document.querySelectorAll('[id^="growth-imp-add-"]').forEach((button) => {
+      button.addEventListener('click', () => addGrowthImprovement(button.dataset.skill));
+    });
+    document.querySelectorAll('[data-growth-imp-input]').forEach((input) => {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          addGrowthImprovement(input.dataset.growthImpInput);
+        }
       });
     });
 
-    byId('sign-in-form')?.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const email = byId('email').value.trim();
-      if (email) signIn(email);
+    // Toggle complete / delete / edit / move.
+    document.querySelectorAll('[data-growth-imp-toggle]').forEach((button) => {
+      button.addEventListener('click', () => toggleGrowthImprovement(button.dataset.skill, button.dataset.growthImpToggle));
+    });
+    document.querySelectorAll('[data-growth-imp-delete]').forEach((button) => {
+      button.addEventListener('click', () => deleteGrowthImprovement(button.dataset.skill, button.dataset.growthImpDelete));
+    });
+    document.querySelectorAll('[data-growth-imp-edit-btn]').forEach((button) => {
+      button.addEventListener('click', () => startEditingGrowthImprovement(button.dataset.growthImpEditBtn));
+    });
+    document.querySelectorAll('[data-growth-imp-save]').forEach((button) => {
+      button.addEventListener('click', () => saveGrowthImprovementEdit(button.dataset.skill, button.dataset.growthImpSave));
+    });
+    document.querySelectorAll('[data-growth-imp-cancel]').forEach((button) => {
+      button.addEventListener('click', () => cancelEditingGrowthImprovement());
+    });
+    document.querySelectorAll('[data-growth-imp-up]').forEach((button) => {
+      button.addEventListener('click', () => moveGrowthImprovement(button.dataset.skill, button.dataset.growthImpUp, -1));
+    });
+    document.querySelectorAll('[data-growth-imp-down]').forEach((button) => {
+      button.addEventListener('click', () => moveGrowthImprovement(button.dataset.skill, button.dataset.growthImpDown, 1));
     });
 
-    byId('sign-out')?.addEventListener('click', signOut);
+    // Native drag-and-drop reordering (desktop). Buttons above cover mobile.
+    let dragImprovementId = '';
+    document.querySelectorAll('[data-growth-imp]').forEach((item) => {
+      item.addEventListener('dragstart', (event) => {
+        dragImprovementId = item.dataset.growthImp;
+        event.dataTransfer.effectAllowed = 'move';
+        item.classList.add('dragging');
+      });
+      item.addEventListener('dragend', () => {
+        item.classList.remove('dragging');
+        dragImprovementId = '';
+      });
+      item.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        item.classList.add('drag-over');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('drop', (event) => {
+        event.preventDefault();
+        item.classList.remove('drag-over');
+        if (dragImprovementId && dragImprovementId !== item.dataset.growthImp) {
+          reorderGrowthImprovement(item.dataset.skill, dragImprovementId, item.dataset.growthImp);
+        }
+      });
+    });
+
+    bindGrowthRadarEvents();
+  }
+
+  // Radar: drag handles to change levels, click a label to expand its card,
+  // hover a handle for a tooltip. Geometry math runs in SVG user units.
+  function bindGrowthRadarEvents() {
+    const svg = document.querySelector('.growth-radar');
+    if (!svg) return;
+
+    const pointerToSvg = (event) => {
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return null;
+      return point.matrixTransform(ctm.inverse());
+    };
+
+    document.querySelectorAll('[data-skill-axis]').forEach((handle) => {
+      const axisId = handle.dataset.skillAxis;
+      let didDrag = false;
+      const startDrag = (event) => {
+        event.preventDefault();
+        ui.growthDraggingAxis = axisId;
+        didDrag = false;
+        handle.setPointerCapture?.(event.pointerId);
+        const move = (ev) => {
+          if (ui.growthDraggingAxis !== axisId) return;
+          const pt = pointerToSvg(ev);
+          if (!pt) return;
+          didDrag = true;
+          const value = growthValueFromPointer(GROWTH_SKILLS.findIndex((def) => def.id === axisId), pt.x, pt.y);
+          updateSkillValue(axisId, value);
+        };
+        const end = () => {
+          ui.growthDraggingAxis = '';
+          handle.removeEventListener('pointermove', move);
+          handle.removeEventListener('pointerup', end);
+          handle.removeEventListener('pointercancel', end);
+          // Keep didDrag true briefly so the synthesized click is suppressed.
+          setTimeout(() => { didDrag = false; }, 0);
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', end);
+        handle.addEventListener('pointercancel', end);
+      };
+      handle.addEventListener('pointerdown', startDrag);
+      handle.addEventListener('click', () => {
+        // Suppress the click that follows an actual drag.
+        if (didDrag) return;
+        expandGrowthSkill(axisId);
+      });
+      // Hover tooltip via the title attribute pattern (simple, accessible).
+      handle.addEventListener('pointerenter', () => {
+        const skill = growthSkillById(axisId);
+        if (!skill) return;
+        const updated = skill.updatedAt ? relativeTime(skill.updatedAt) : 'never';
+        const tip = `${skill.title}\nCurrent Level: ${skill.value}\nLast updated: ${updated}`;
+        handle.setAttribute('title', tip);
+      });
+    });
   }
 
   function addTask() {

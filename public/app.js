@@ -3433,6 +3433,11 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       document.querySelector('.calendar-panel')?.scrollIntoView({ block: 'start' });
     }
   }
+
+  function bindEvents() {
+    const byId = (id) => document.getElementById(id);
+    byId('clear-notice')?.addEventListener('click', () => {
+      notice = '';
       render();
     });
 

@@ -602,7 +602,7 @@ const ui = {
     if (/^(hi|hello|hey|yo|hola|good morning|good evening|good afternoon)\b/i.test(lower)) {
       return {
         action: 'chat',
-        content: 'Hi! I can open links, add tasks/notes/habits, and manage your dashboard. Try "open YouTube", "add task buy milk", or "list links".'
+        content: 'Hi! I can open links, add tasks/notes/habits, manage growth skills, and more. Try "open YouTube", "add task buy milk", "list skills", or "growth overview".'
       };
     }
 
@@ -667,6 +667,50 @@ const ui = {
 
     match = text.match(/^mark\s+(.+?)\s+done$/i);
     if (match) return { action: 'complete_task', title: match[1].trim() };
+
+    // ─── Personal Growth Skills ────────────────────────────────────────────────
+    if (/^(list|show)\s+(my\s+)?(growth\s+)?skills?$/i.test(text) || /^what('?s| is) my (growth|skill)/i.test(lower)) {
+      return { action: 'list_skills' };
+    }
+    if (/^(my\s+)?(weakest|lowest|worst)\s+skill/i.test(text)) {
+      return { action: 'weakest_skill' };
+    }
+    if (/^(my\s+)?(strongest|highest|best)\s+skill/i.test(text)) {
+      return { action: 'strongest_skill' };
+    }
+    if (/^(growth|skills?)\s+(overview|summary|status)/i.test(text)) {
+      return { action: 'growth_overview' };
+    }
+    // "set communication to 80" / "set problem-solving level 65" / "change personality to 90"
+    match = text.match(/^set\s+(.+?)\s+(?:to|level|at)\s+(\d{1,3})$/i) || text.match(/^change\s+(.+?)\s+(?:to|level|at)\s+(\d{1,3})$/i);
+    if (match) {
+      return { action: 'set_skill_level', title: match[1].trim(), value: Number(match[2]) };
+    }
+    // "add improvement to knowledge: learn machine learning" / "add goal to money: save 10k"
+    match = text.match(/^add\s+(?:improvement|goal|task)\s+(?:to|for|on)\s+(.+?)\s*:\s*(.+)$/i);
+    if (match) {
+      return { action: 'add_improvement', title: match[1].trim(), content: match[2].trim() };
+    }
+    // "list improvements for knowledge" / "show goals for money"
+    match = text.match(/^(list|show)\s+(?:improvements?|goals?)\s+(?:for|in)\s+(.+)$/i);
+    if (match) {
+      return { action: 'list_improvements', title: match[1].trim() };
+    }
+    // "complete improvement learn AI" / "done improvement learn AI on knowledge"
+    match = text.match(/^(?:complete|done|finish|check)\s+(?:improvement|goal)\s+(.+)$/i);
+    if (match) {
+      return { action: 'complete_improvement', title: match[1].trim() };
+    }
+    // "delete improvement learn AI from knowledge" / "remove goal save 10k from money"
+    match = text.match(/^(?:delete|remove)\s+(?:improvement|goal)\s+(.+?)\s+(?:from|on)\s+(.+)$/i);
+    if (match) {
+      return { action: 'delete_improvement', content: match[1].trim(), title: match[2].trim() };
+    }
+    // "set notes for communication: practice active listening daily"
+    match = text.match(/^set\s+notes?\s+(?:for|on)\s+(.+?)\s*:\s*(.+)$/i);
+    if (match) {
+      return { action: 'set_skill_notes', title: match[1].trim(), content: match[2].trim() };
+    }
 
     return null;
   }
@@ -2447,7 +2491,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
   // ─── Personal Growth Dashboard ────────────────────────────────────────────
   // Radar geometry. viewBox is square; center + radius in SVG user units.
-  const GROWTH_RADAR = { cx: 150, cy: 150, radius: 116, labelRadius: 138 };
+  const GROWTH_RADAR = { cx: 150, cy: 150, radius: 116, labelRadius: 148 };
 
   function growthAxisAngle(index) {
     // Start at top (-90deg), go clockwise.
@@ -2483,6 +2527,40 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
   function growthSkillById(id) {
     return (state.skills || []).find((skill) => skill.id === id);
+  }
+
+  // Find a skill by fuzzy matching on title or id (case-insensitive).
+  function findGrowthSkill(query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return null;
+    const skills = state.skills || [];
+    // Exact match on id first.
+    let found = skills.find((s) => s.id === q);
+    if (found) return found;
+    // Exact match on title.
+    found = skills.find((s) => (s.title || '').toLowerCase() === q);
+    if (found) return found;
+    // Partial match on title (contains).
+    found = skills.find((s) => (s.title || '').toLowerCase().includes(q));
+    if (found) return found;
+    // Partial match on id (contains).
+    found = skills.find((s) => s.id.includes(q));
+    if (found) return found;
+    return null;
+  }
+
+  // Find an improvement across all skills by title. Returns { skillId, improvement } or null.
+  function findGrowthImprovement(query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return null;
+    const skills = state.skills || [];
+    for (const skill of skills) {
+      const improvements = skill.improvements || [];
+      const imp = improvements.find((item) => item.title.toLowerCase() === q)
+        || improvements.find((item) => item.title.toLowerCase().includes(q));
+      if (imp) return { skillId: skill.id, improvement: imp };
+    }
+    return null;
   }
 
   // Update a skill level WITHOUT a full re-render. Used during slider input and
@@ -2722,7 +2800,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         </g>`;
     }).join('');
 
-    return `<svg class="growth-radar" viewBox="0 0 300 300" role="img" aria-label="Personal growth radar chart">
+    return `<svg class="growth-radar" viewBox="-20 -20 340 340" role="img" aria-label="Personal growth radar chart">
         ${rings}
         ${spokes}
         <polygon class="growth-fill" id="growth-radar-polygon" points="${escapeHtml(polygonPoints)}" />
@@ -3161,6 +3239,18 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         albums: (state.albums || []).length,
         files: (state.photos || []).length
       },
+      skills: (state.skills || []).slice(0, 20).map((skill) => ({
+        id: skill.id,
+        title: skill.title || GROWTH_SKILLS.find((d) => d.id === skill.id)?.title || skill.id,
+        value: skill.value,
+        notes: (skill.notes || '').slice(0, 120),
+        improvements: (skill.improvements || []).slice(0, 20).map((imp) => ({
+          id: imp.id,
+          title: imp.title,
+          completed: Boolean(imp.completed),
+          priority: imp.priority || 'Medium'
+        }))
+      })),
       links: quickLinks.map(([name, url]) => ({ name, url }))
     };
   }
@@ -3614,15 +3704,131 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
     if (action === 'list_dashboard') {
       const openTasks = state.tasks.filter((task) => !task.done).length;
+      const overall = overallGrowthLevel(state.skills);
       return [
         `Notes: ${state.notes.length}`,
         `Open tasks: ${openTasks}`,
         `Events: ${state.events.length}`,
         `Habits: ${state.habits.length}`,
         `Picks: ${state.picks.length}`,
+        `Growth skills: ${(state.skills || []).length} (overall ${overall})`,
         `Albums: ${(state.albums || []).length}`,
         `Files: ${(state.photos || []).length}`
       ].join('\n');
+    }
+
+    // ─── Personal Growth Skills ────────────────────────────────────────────────
+    if (action === 'list_skills' || action === 'list_growth_skills') {
+      const skills = state.skills || [];
+      if (!skills.length) return 'You have no growth skills yet.';
+      return skills
+        .map((skill, index) => {
+          const impTotal = (skill.improvements || []).length;
+          const impDone = (skill.improvements || []).filter((i) => i.completed).length;
+          return `${index + 1}. ${skill.title || skill.id} — Level ${skill.value}/100${impTotal ? ` (${impDone}/${impTotal} improvements)` : ''}`;
+        })
+        .join('\n');
+    }
+
+    if (action === 'weakest_skill') {
+      const skills = (state.skills || []).filter((s) => s.value < 100);
+      if (!skills.length) return 'All skills are at max level!';
+      skills.sort((a, b) => a.value - b.value);
+      const weakest = skills[0];
+      const impOpen = (weakest.improvements || []).filter((i) => !i.completed).length;
+      return `Your weakest skill: ${weakest.title || weakest.id} at Level ${weakest.value}/100${impOpen ? ` (${impOpen} open improvements)` : ''}`;
+    }
+
+    if (action === 'strongest_skill') {
+      const skills = state.skills || [];
+      if (!skills.length) return 'You have no growth skills yet.';
+      skills.sort((a, b) => b.value - a.value);
+      const strongest = skills[0];
+      return `Your strongest skill: ${strongest.title || strongest.id} at Level ${strongest.value}/100`;
+    }
+
+    if (action === 'growth_overview') {
+      const skills = state.skills || [];
+      if (!skills.length) return 'No growth skills tracked yet.';
+      const overall = overallGrowthLevel(skills);
+      const lines = [`Overall growth: ${overall}/100`, ''];
+      skills.forEach((skill) => {
+        const impTotal = (skill.improvements || []).length;
+        const impDone = (skill.improvements || []).filter((i) => i.completed).length;
+        const bar = '█'.repeat(Math.round(skill.value / 5)) + '░'.repeat(20 - Math.round(skill.value / 5));
+        lines.push(`${skill.title || skill.id} ${bar} ${skill.value}${impTotal ? ` (${impDone}/${impTotal} done)` : ''}`);
+      });
+      return lines.join('\n');
+    }
+
+    if (action === 'set_skill_level') {
+      const skill = findGrowthSkill(payload.title || payload.content);
+      if (!skill) return `Could not find skill "${payload.title || payload.content}". Try: ${(state.skills || []).map((s) => s.title || s.id).join(', ') || 'none'}`;
+      const value = Math.max(0, Math.min(100, Math.round(Number(payload.value) || 0)));
+      updateSkillValue(skill.id, value);
+      return `${skill.title || skill.id} set to Level ${value}.`;
+    }
+
+    if (action === 'add_improvement') {
+      const skill = findGrowthSkill(payload.title || '');
+      if (!skill) return `Could not find skill "${payload.title}". Try: ${(state.skills || []).map((s) => s.title || s.id).join(', ') || 'none'}`;
+      const title = String(payload.content || payload.description || '').trim();
+      if (!title) return 'Improvement description is missing.';
+      mutateSkill(skill.id, (s) => ({
+        ...s,
+        improvements: [
+          { id: uid('improvement'), title, completed: false, priority: 'Medium', deadline: '', createdAt: new Date().toISOString(), notes: '', streak: 0, lastCompleted: '' },
+          ...(s.improvements || [])
+        ]
+      }));
+      return `Improvement "${title}" added to ${skill.title || skill.id}.`;
+    }
+
+    if (action === 'list_improvements') {
+      const skill = findGrowthSkill(payload.title || '');
+      if (!skill) return `Could not find skill "${payload.title}". Try: ${(state.skills || []).map((s) => s.title || s.id).join(', ') || 'none'}`;
+      const improvements = skill.improvements || [];
+      if (!improvements.length) return `No improvements for ${skill.title || skill.id} yet.`;
+      return improvements
+        .map((imp, index) => `${index + 1}. ${imp.completed ? '✅' : '⬜'} ${imp.title} [${imp.priority || 'Medium'}]`)
+        .join('\n');
+    }
+
+    if (action === 'complete_improvement') {
+      const result = findGrowthImprovement(payload.title || '');
+      if (!result) return `Could not find improvement "${payload.title}".`;
+      mutateSkill(result.skillId, (s) => ({
+        ...s,
+        improvements: (s.improvements || []).map((item) =>
+          item.id === result.improvement.id
+            ? { ...item, completed: true, lastCompleted: new Date().toISOString() }
+            : item
+        )
+      }));
+      return `Marked "${result.improvement.title}" as completed.`;
+    }
+
+    if (action === 'delete_improvement') {
+      const impTitle = String(payload.content || payload.description || '').trim();
+      const skill = findGrowthSkill(payload.title || '');
+      if (!skill) return `Could not find skill "${payload.title}".`;
+      const improvements = skill.improvements || [];
+      const imp = improvements.find((item) => item.title.toLowerCase() === impTitle.toLowerCase());
+      if (!imp) return `Could not find improvement "${impTitle}" in ${skill.title || skill.id}.`;
+      mutateSkill(skill.id, (s) => ({
+        ...s,
+        improvements: (s.improvements || []).filter((item) => item.id !== imp.id)
+      }));
+      return `Improvement "${imp.title}" removed from ${skill.title || skill.id}.`;
+    }
+
+    if (action === 'set_skill_notes') {
+      const skill = findGrowthSkill(payload.title || '');
+      if (!skill) return `Could not find skill "${payload.title}". Try: ${(state.skills || []).map((s) => s.title || s.id).join(', ') || 'none'}`;
+      const notes = String(payload.content || payload.description || '').trim();
+      if (!notes) return 'Notes content is missing.';
+      mutateSkill(skill.id, (s) => ({ ...s, notes, updatedAt: new Date().toISOString() }));
+      return `Notes saved for ${skill.title || skill.id}.`;
     }
 
     return payload.success_message || 'Action completed.';
@@ -3657,7 +3863,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
           ${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}
         </div>
         <form class="hk-ai-compose" id="hk-ai-form">
-          <input id="hk-ai-input" placeholder="Open YouTube, add task, check habits..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
+          <input id="hk-ai-input" placeholder="Open YouTube, add task, list skills, growth overview..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
           <button type="submit" ${ui.aiLoading ? 'disabled' : ''}>Send</button>
         </form>
         <p class="hk-ai-footnote">Chats are temporary. Only dashboard changes are saved.</p>
@@ -3775,7 +3981,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
           ${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}
         </div>
         <form class="hk-ai-compose" id="hk-ai-form">
-          <input id="hk-ai-input" placeholder="Open YouTube, add task, check habits..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
+          <input id="hk-ai-input" placeholder="Open YouTube, add task, list skills, growth overview..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
           <button type="submit" ${ui.aiLoading ? 'disabled' : ''}>Send</button>
         </form>
         <p class="hk-ai-footnote">Chats are temporary. Only dashboard changes are saved.</p>

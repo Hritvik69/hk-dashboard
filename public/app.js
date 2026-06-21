@@ -11,6 +11,23 @@
   const SYNC_INTERVAL_MS = 20000;
   const ONE_SIGNAL_PROMPT_STORAGE = 'hk-dashboard-onesignal-prompted-v1';
   const REMINDER_FLAGS = ['twoDays', 'oneDay', 'threeHours', 'startNow', 'completed'];
+
+  // Personal Growth — 7 life dimensions. Stable ids drive the radar axes.
+  // Order matters: it's the clockwise axis order of the radar chart.
+  // MUST be declared here (before state initialization) because seedGrowthSkills()
+  // runs during the IIFE top-level state = mergeDashboard(readLocal()).
+  const GROWTH_SKILLS = [
+    { id: 'communication', title: 'Communication', icon: '💬', color: '#49d7e9' },
+    { id: 'overall', title: 'Overall Skills', icon: '🎯', color: '#63d297' },
+    { id: 'personality', title: 'Personality', icon: '🧠', color: '#8b5cf6' },
+    { id: 'emotions', title: 'Emotions', icon: '❤️', color: '#ff5c7a' },
+    { id: 'knowledge', title: 'Knowledge', icon: '📚', color: '#f2b84b' },
+    { id: 'problem-solving', title: 'Problem Solving', icon: '🧩', color: '#a78bfa' },
+    { id: 'money', title: 'Financial Skills', icon: '💰', color: '#81e6d9' }
+  ];
+  const GROWTH_IMPROVEMENT_PRIORITIES = ['Low', 'Medium', 'High'];
+  const GROWTH_HISTORY_CAP = 100;
+
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
 
@@ -195,20 +212,6 @@ const ui = {
       updatedAt: now
     };
   }
-
-  // Personal Growth — 7 life dimensions. Stable ids drive the radar axes.
-  // Order matters: it's the clockwise axis order of the radar chart.
-  const GROWTH_SKILLS = [
-    { id: 'communication', title: 'Communication', icon: '💬', color: '#49d7e9' },
-    { id: 'overall', title: 'Overall Skills', icon: '🎯', color: '#63d297' },
-    { id: 'personality', title: 'Personality', icon: '🧠', color: '#8b5cf6' },
-    { id: 'emotions', title: 'Emotions', icon: '❤️', color: '#ff5c7a' },
-    { id: 'knowledge', title: 'Knowledge', icon: '📚', color: '#f2b84b' },
-    { id: 'problem-solving', title: 'Problem Solving', icon: '🧩', color: '#a78bfa' },
-    { id: 'money', title: 'Financial Skills', icon: '💰', color: '#81e6d9' }
-  ];
-  const GROWTH_IMPROVEMENT_PRIORITIES = ['Low', 'Medium', 'High'];
-  const GROWTH_HISTORY_CAP = 100;
 
   function normalizeImprovement(item) {
     const priority = GROWTH_IMPROVEMENT_PRIORITIES.includes(item?.priority) ? item.priority : 'Normal';

@@ -9,6 +9,8 @@
   const ALBUM_PASSWORD_HASH = 'aaef22647a24721100b6e9d6c40d6cc603de3db95cd848b99fff75752f2ac64d';
   const DEFAULT_REMOTE_SITE_URL = 'https://hk-dashboard-omega.vercel.app';
   const SYNC_INTERVAL_MS = 20000;
+  const ONE_SIGNAL_PROMPT_STORAGE = 'hk-dashboard-onesignal-prompted-v1';
+  const REMINDER_FLAGS = ['twoDays', 'oneDay', 'threeHours', 'startNow', 'completed'];
   const config = window.HK_CONFIG || {};
   const root = document.getElementById('root');
 
@@ -20,6 +22,9 @@
   let clockTimer = null;
   let realtimeChannel = null;
   let cloudBooted = false;
+  let oneSignalBooted = false;
+  let oneSignalExternalId = '';
+  let calendarDeepLinkHandled = false;
   let hasLoadedCloud = false;
   let statusText = 'Local browser saving';
   let syncText = 'Not synced yet';
@@ -176,6 +181,7 @@ const ui = {
       notes: [],
       tasks: [],
       events: [],
+      eventHistory: [],
       habits: [],
       picks: [],
       albums: [defaultAlbum(now)],
@@ -190,12 +196,17 @@ const ui = {
     const data = input && typeof input === 'object' ? input : {};
     const photos = normalizeFiles(Array.isArray(data.photos) ? data.photos : Array.isArray(data.files) ? data.files : defaults.photos);
     const albums = normalizeAlbums(Array.isArray(data.albums) ? data.albums : defaults.albums, photos, data.updatedAt || defaults.updatedAt);
+    const calendar = normalizeCalendarData(
+      Array.isArray(data.events) ? data.events : defaults.events,
+      Array.isArray(data.eventHistory) ? data.eventHistory : Array.isArray(data.completedHistory) ? data.completedHistory : defaults.eventHistory
+    );
     return cleanSeedData({
       ...defaults,
       ...data,
       notes: Array.isArray(data.notes) ? data.notes : defaults.notes,
       tasks: Array.isArray(data.tasks) ? data.tasks : defaults.tasks,
-      events: Array.isArray(data.events) ? data.events : defaults.events,
+      events: calendar.events,
+      eventHistory: calendar.eventHistory,
       habits: Array.isArray(data.habits) ? data.habits : defaults.habits,
       picks: Array.isArray(data.picks) ? data.picks : defaults.picks,
       albums,
@@ -203,6 +214,98 @@ const ui = {
       growthStartDate: data.growthStartDate || inferGrowthStartDate(data.habits) || defaults.growthStartDate,
       updatedAt: data.updatedAt || defaults.updatedAt
     });
+  }
+
+  function isEventCompleted(event) {
+    return Boolean(event?.completed || event?.done);
+  }
+
+  function normalizeNotificationFlags(flags) {
+    const input = flags && typeof flags === 'object' ? flags : {};
+    return REMINDER_FLAGS.reduce((next, key) => {
+      next[key] = Boolean(input[key]);
+      return next;
+    }, {});
+  }
+
+  function normalizeEvent(event) {
+    const title = String(event?.title || '').trim();
+    const date = isDateKey(event?.date) ? event.date : todayKey(1);
+    return {
+      id: event?.id || uid('event'),
+      title: title || 'Untitled event',
+      date,
+      time: String(event?.time || ''),
+      completed: isEventCompleted(event),
+      done: isEventCompleted(event),
+      notificationEnabled: event?.notificationEnabled !== false,
+      notificationFlags: normalizeNotificationFlags(event?.notificationFlags),
+      timeZone: String(event?.timeZone || config.REMINDER_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'),
+      completedAt: event?.completedAt || '',
+      createdAt: event?.createdAt || new Date().toISOString()
+    };
+  }
+
+  function historyFromEvent(event) {
+    const normalized = normalizeEvent(event);
+    return {
+      id: event?.historyId || `history-${normalized.id}`,
+      originalEventId: normalized.id,
+      title: normalized.title,
+      date: normalized.date,
+      time: normalized.time,
+      completed: true,
+      notificationEnabled: normalized.notificationEnabled,
+      notificationFlags: normalizeNotificationFlags(normalized.notificationFlags),
+      timeZone: normalized.timeZone,
+      completedAt: normalized.completedAt || new Date().toISOString(),
+      createdAt: normalized.createdAt
+    };
+  }
+
+  function normalizeHistoryItem(item) {
+    if (item?.originalEventId || item?.completedAt) {
+      const originalEventId = String(item.originalEventId || item.id || uid('event'));
+      return {
+        id: item.id || `history-${originalEventId}`,
+        originalEventId,
+        title: String(item.title || 'Untitled event'),
+        date: isDateKey(item.date) ? item.date : todayKey(),
+        time: String(item.time || ''),
+        completed: true,
+        notificationEnabled: item?.notificationEnabled !== false,
+        notificationFlags: normalizeNotificationFlags(item?.notificationFlags),
+        timeZone: String(item?.timeZone || config.REMINDER_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'),
+        completedAt: item.completedAt || new Date().toISOString(),
+        createdAt: item.createdAt || item.originalCreatedAt || new Date().toISOString()
+      };
+    }
+    return historyFromEvent(item);
+  }
+
+  function normalizeCalendarData(events, eventHistory) {
+    const active = [];
+    const history = new Map();
+
+    (Array.isArray(eventHistory) ? eventHistory : []).forEach((item) => {
+      const normalized = normalizeHistoryItem(item);
+      history.set(normalized.originalEventId || normalized.id, normalized);
+    });
+
+    (Array.isArray(events) ? events : []).forEach((item) => {
+      const normalized = normalizeEvent(item);
+      if (normalized.completed) {
+        const historyItem = historyFromEvent(normalized);
+        history.set(historyItem.originalEventId, historyItem);
+        return;
+      }
+      active.push(normalized);
+    });
+
+    return {
+      events: active.sort((a, b) => `${a.date || ''}${a.time || ''}`.localeCompare(`${b.date || ''}${b.time || ''}`)),
+      eventHistory: Array.from(history.values()).sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')))
+    };
   }
 
   function cleanSeedData(data) {
@@ -225,7 +328,7 @@ const ui = {
 
   function hasDashboardContent(data) {
     if (!data || typeof data !== 'object') return false;
-    return ['notes', 'tasks', 'events', 'habits', 'picks', 'photos'].some((key) => {
+    return ['notes', 'tasks', 'events', 'eventHistory', 'habits', 'picks', 'photos'].some((key) => {
       return Array.isArray(data[key]) && data[key].length > 0;
     }) || (Array.isArray(data.albums) && data.albums.length > 1);
   }
@@ -530,6 +633,94 @@ const ui = {
     );
   }
 
+  function dashboardNotificationExternalId() {
+    return String(session?.user?.id || config.ONESIGNAL_EXTERNAL_ID || 'hk-dashboard').trim();
+  }
+
+  function oneSignalConfigured() {
+    return Boolean(config.ONESIGNAL_APP_ID && 'Notification' in window && 'serviceWorker' in navigator);
+  }
+
+  function oneSignalPromptWasUsed() {
+    try {
+      return localStorage.getItem(ONE_SIGNAL_PROMPT_STORAGE) === 'yes';
+    } catch {
+      return true;
+    }
+  }
+
+  function markOneSignalPromptUsed() {
+    try {
+      localStorage.setItem(ONE_SIGNAL_PROMPT_STORAGE, 'yes');
+    } catch {
+      /* Permission prompting is still safe without localStorage. */
+    }
+  }
+
+  function pushOneSignalTask(task) {
+    if (!oneSignalConfigured()) return;
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(task);
+  }
+
+  function syncOneSignalIdentity() {
+    if (!oneSignalConfigured()) return;
+    const externalId = dashboardNotificationExternalId();
+    if (!externalId || oneSignalExternalId === externalId) return;
+    oneSignalExternalId = externalId;
+
+    pushOneSignalTask(async (OneSignal) => {
+      try {
+        await OneSignal.login(externalId);
+      } catch (error) {
+        console.warn('OneSignal identity sync failed.', error);
+      }
+    });
+  }
+
+  function bootOneSignal(options = {}) {
+    if (!oneSignalConfigured()) return;
+    const requestPermission = Boolean(options.requestPermission);
+    const forcePrompt = Boolean(options.forcePrompt);
+
+    pushOneSignalTask(async (OneSignal) => {
+      try {
+        if (!oneSignalBooted) {
+          oneSignalBooted = true;
+          await OneSignal.init({
+            appId: config.ONESIGNAL_APP_ID,
+            allowLocalhostAsSecureOrigin: true,
+            serviceWorkerPath: 'OneSignalSDKWorker.js',
+            serviceWorkerParam: { scope: '/' },
+            notifyButton: { enable: false },
+            promptOptions: {
+              slidedown: {
+                prompts: [{ type: 'push', autoPrompt: false }]
+              }
+            }
+          });
+        }
+
+        syncOneSignalIdentity();
+
+        if (requestPermission && Notification.permission === 'default' && (forcePrompt || !oneSignalPromptWasUsed())) {
+          markOneSignalPromptUsed();
+          await OneSignal.Notifications.requestPermission();
+        }
+      } catch (error) {
+        console.warn('OneSignal setup failed.', error);
+      }
+    });
+  }
+
+  function requestOneSignalPermission() {
+    if (!oneSignalConfigured()) {
+      setNotice('Add OneSignal env vars and deploy over HTTPS to enable push reminders.');
+      return;
+    }
+    bootOneSignal({ requestPermission: true, forcePrompt: true });
+  }
+
   function dataUrlToText(url) {
     const match = String(url || '').match(/^data:([^,]*),(.*)$/);
     if (!match) return '';
@@ -685,6 +876,7 @@ const ui = {
       notes: state.notes,
       tasks: state.tasks,
       events: state.events,
+      eventHistory: state.eventHistory,
       habits: state.habits,
       picks: state.picks,
       photos: state.photos,
@@ -787,6 +979,8 @@ const ui = {
     client.auth.onAuthStateChange(async (_event, nextSession) => {
       session = nextSession;
       statusText = session ? 'Supabase cloud sync' : 'Cloud ready, sign in to sync';
+      oneSignalExternalId = '';
+      syncOneSignalIdentity();
       hasLoadedCloud = false;
       await syncCloudNow({ force: true, silent: true });
       startCloudSync();
@@ -1058,7 +1252,7 @@ const ui = {
 
   function eventCounts() {
     return state.events.reduce((map, event) => {
-      if (event.done) return map;
+      if (isEventCompleted(event)) return map;
       map[event.date] = (map[event.date] || 0) + 1;
       return map;
     }, {});
@@ -1535,16 +1729,21 @@ const ui = {
       .join('');
 
     const selectedEvents = state.events
-      .filter((event) => event.date === ui.selectedDate && !event.done)
+      .filter((event) => event.date === ui.selectedDate && !isEventCompleted(event))
       .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
 
     const eventsHtml = selectedEvents.length
       ? selectedEvents
           .map((event) => {
+            const notifyOn = event.notificationEnabled !== false;
             return `<div class="list-item event-item">
               <span class="icon">CA</span>
-              <div><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.time || 'All day')}</span></div>
+              <div>
+                <strong>${escapeHtml(event.title)}</strong>
+                <span>${escapeHtml(event.time || 'All day')} · Notifications ${notifyOn ? 'on' : 'off'}</span>
+              </div>
               <div class="item-actions">
+                <button type="button" class="${notifyOn ? 'notify-button active' : 'notify-button'}" data-event-notify="${escapeHtml(event.id)}">${notifyOn ? 'Notify On' : 'Notify Off'}</button>
                 <button type="button" class="finish-button" data-event-finish="${escapeHtml(event.id)}">Finish</button>
                 <button type="button" class="remove-button" data-event-delete="${escapeHtml(event.id)}">Remove</button>
               </div>
@@ -1552,6 +1751,20 @@ const ui = {
           })
           .join('')
       : '<p class="empty">No events</p>';
+
+    const historyHtml = state.eventHistory.length
+      ? state.eventHistory
+          .slice(0, 8)
+          .map((event) => {
+            const when = [formatDisplayDate(event.date), event.time || 'All day'].filter(Boolean).join(' · ');
+            return `<div class="list-item event-item history-item">
+              <span class="icon">OK</span>
+              <div><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(when)}</span></div>
+              <small>${escapeHtml(new Date(event.completedAt || event.createdAt || Date.now()).toLocaleDateString())}</small>
+            </div>`;
+          })
+          .join('')
+      : '<p class="empty">No completed events</p>';
 
     return `<article class="panel calendar-panel">
       <header class="panel-header">
@@ -1567,9 +1780,11 @@ const ui = {
         <input id="event-title" placeholder="Add reminder or event" />
         <input id="event-date" type="date" value="${ui.selectedDate || todayKey(1)}" />
         <input id="event-time" type="time" value="09:00" />
+        <label class="checkbox-line notify-line"><input id="event-notify" type="checkbox" checked />Notify</label>
         <button type="button" id="add-event">Add</button>
       </div>
       <div class="list-block"><h3>${formatDisplayDate(ui.selectedDate)}</h3>${eventsHtml}</div>
+      <div class="list-block history-block"><h3>Completed History</h3>${historyHtml}</div>
     </article>`;
   }
 
@@ -1953,6 +2168,153 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       <p>${escapeHtml(file.name || 'File')}</p>
       <small>${formatBytes(file.size)} &middot; download to open this format</small>
     </div>`;
+  }
+
+  function calcStorageData() {
+    // ── Real localStorage usage ────────────────────────────────
+    let localStorageUsed = 0;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) || '';
+      localStorageUsed = new Blob([raw]).size;
+    } catch { /* unavailable */ }
+
+    // ── Per-category byte estimates ────────────────────────────
+    function jsonBytes(value) {
+      try { return new Blob([JSON.stringify(value)]).size; } catch { return 0; }
+    }
+
+    const notesBytes   = jsonBytes(state.notes);
+    const tasksBytes   = jsonBytes(state.tasks);
+    const calBytes     = jsonBytes(state.events) + jsonBytes(state.eventHistory);
+    const habitsBytes  = jsonBytes(state.habits);
+    const picksBytes   = jsonBytes(state.picks);
+
+    // Gallery: use stored size field when available (real file size), else estimate from dataUrl
+    const galleryBytes = (state.photos || []).reduce((sum, file) => {
+      if (Number(file.size) > 0) return sum + Number(file.size);
+      const url = file.dataUrl || file.url || '';
+      if (url.startsWith('data:')) return sum + Math.round((url.length * 3) / 4);
+      return sum;
+    }, 0);
+
+    const totalTracked = notesBytes + tasksBytes + calBytes + habitsBytes + picksBytes + galleryBytes;
+
+    // LocalStorage quota is typically 5 MB (some browsers 10 MB)
+    const LS_QUOTA = 5 * 1024 * 1024;
+    const lsUsedPct = Math.min((localStorageUsed / LS_QUOTA) * 100, 100);
+
+    return {
+      localStorageUsed,
+      lsUsedPct,
+      LS_QUOTA,
+      totalTracked,
+      categories: [
+        { key: 'notes',    label: 'Notes',          icon: '📝', bytes: notesBytes,  count: state.notes.length,               color: '#49d7e9' },
+        { key: 'tasks',    label: 'Tasks',           icon: '✅', bytes: tasksBytes,  count: state.tasks.length,               color: '#f2b84b' },
+        { key: 'calendar', label: 'Calendar',        icon: '📅', bytes: calBytes,    count: state.events.length + state.eventHistory.length, color: '#63d297' },
+        { key: 'habits',   label: 'Habits',          icon: '🔥', bytes: habitsBytes, count: state.habits.length,              color: '#ff5c7a' },
+        { key: 'gallery',  label: 'Gallery & Files', icon: '🖼️', bytes: galleryBytes,count: (state.photos || []).length,      color: '#8b5cf6' },
+        { key: 'picks',    label: 'Stock Picks',     icon: '📈', bytes: picksBytes,  count: state.picks.length,               color: '#81e6d9' }
+      ]
+    };
+  }
+
+  function renderStoragePanel() {
+    const data = calcStorageData();
+    const { localStorageUsed, lsUsedPct, LS_QUOTA, totalTracked, categories } = data;
+
+    const circumference = 2 * Math.PI * 44; // r=44 on viewBox 110
+    const filledArc = (lsUsedPct / 100) * circumference;
+
+    // Donut colour: green→amber→rose based on usage
+    const donutColor = lsUsedPct < 60 ? '#49d7e9' : lsUsedPct < 85 ? '#f2b84b' : '#ff5c7a';
+
+    const catCardsHtml = categories.map((cat) => {
+      const pct = totalTracked > 0 ? Math.min((cat.bytes / totalTracked) * 100, 100) : 0;
+      return `<div class="storage-cat-card">
+        <div class="storage-cat-header">
+          <div class="storage-cat-icon ${cat.key}">${cat.icon}</div>
+          <div class="storage-cat-info">
+            <strong>${escapeHtml(cat.label)}</strong>
+            <span>${cat.count} item${cat.count !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div class="storage-cat-bar-wrap">
+          <div class="storage-cat-bar ${cat.key}" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+        <div class="storage-cat-footer">
+          <span class="storage-cat-size">${formatBytes(cat.bytes)}</span>
+          <span class="storage-cat-count">${pct.toFixed(1)}% of data</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    const breakdownHtml = [...categories]
+      .sort((a, b) => b.bytes - a.bytes)
+      .map((cat) => {
+        const pct = totalTracked > 0 ? Math.min((cat.bytes / totalTracked) * 100, 100) : 0;
+        return `<div class="storage-breakdown-row">
+          <div class="storage-breakdown-dot" style="background:${cat.color}"></div>
+          <span class="storage-breakdown-label">${escapeHtml(cat.label)}</span>
+          <div class="storage-breakdown-bar-cell">
+            <div class="storage-breakdown-bar-fill" style="width:${pct.toFixed(1)}%;background:${cat.color}"></div>
+          </div>
+          <span class="storage-breakdown-size">${formatBytes(cat.bytes)}</span>
+        </div>`;
+      }).join('');
+
+    const statusColor = lsUsedPct < 60 ? '#63d297' : lsUsedPct < 85 ? '#f2b84b' : '#ff5c7a';
+    const statusLabel = lsUsedPct < 60 ? 'Healthy' : lsUsedPct < 85 ? 'Getting Full' : 'Nearly Full';
+
+    return `<article class="panel storage-panel">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">Storage Management</p>
+          <h2>Total Storage · ${formatBytes(localStorageUsed)} used</h2>
+        </div>
+        <span class="icon large" style="color:${statusColor};border-color:${statusColor}40;background:${statusColor}14">ST</span>
+      </header>
+
+      <div class="storage-overview">
+        <div class="storage-donut-wrap">
+          <svg class="storage-donut" width="110" height="110" viewBox="0 0 110 110">
+            <circle class="storage-donut-bg" cx="55" cy="55" r="44"/>
+            <circle class="storage-donut-fill" cx="55" cy="55" r="44"
+              stroke="${donutColor}"
+              stroke-dasharray="${filledArc.toFixed(1)} ${circumference.toFixed(1)}"
+            />
+          </svg>
+          <div class="storage-donut-label">
+            <strong>${lsUsedPct.toFixed(0)}%</strong>
+            <small>${statusLabel}</small>
+          </div>
+        </div>
+
+        <div class="storage-overview-text">
+          <h3>Browser Storage (localStorage)</h3>
+          <p>Dashboard data, notes, tasks, habits and small files are saved locally in your browser.</p>
+          <div class="storage-total-bar">
+            <div class="storage-total-bar-fill" style="width:${lsUsedPct.toFixed(1)}%"></div>
+          </div>
+          <div class="storage-total-meta">
+            <span>${formatBytes(localStorageUsed)} used</span>
+            <span>${formatBytes(LS_QUOTA - localStorageUsed)} free of ${formatBytes(LS_QUOTA)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="storage-categories">${catCardsHtml}</div>
+
+      <div class="storage-breakdown-list">
+        <h3>Storage Breakdown</h3>
+        ${breakdownHtml}
+      </div>
+
+      <div class="storage-ls-info">
+        <span class="icon">DB</span>
+        <span>Dashboard data is also cloud-synced when signed in. Gallery files &gt;1 MB are stored in Supabase Storage — they don't count against your 5 MB browser quota.</span>
+      </div>
+    </article>`;
   }
 
   function renderAccount() {
@@ -2379,7 +2741,11 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
           title,
           date,
           time,
+          completed: false,
           done: false,
+          notificationEnabled: true,
+          notificationFlags: normalizeNotificationFlags(),
+          timeZone: config.REMINDER_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
           createdAt: new Date().toISOString()
         }
       ]
@@ -2535,7 +2901,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
     if (action === 'list_events') {
       const upcoming = state.events
-        .filter((event) => !event.done)
+        .filter((event) => !isEventCompleted(event))
         .sort((a, b) => `${a.date || ''}${a.time || ''}`.localeCompare(`${b.date || ''}${b.time || ''}`));
       if (!upcoming.length) return 'You have no upcoming events.';
       return upcoming
@@ -2892,6 +3258,118 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     });
   }
 
+
+  function renderAiMessages() {
+    return aiMessages
+      .map((entry) => {
+        const roleClass = entry.role === 'user' ? 'hk-ai-msg-user' : 'hk-ai-msg-assistant';
+        return `<div class="hk-ai-msg ${roleClass}">${escapeHtml(entry.text)}</div>`;
+      })
+      .join('');
+  }
+
+  function renderAiPanel() {
+    if (!isDashboardUnlocked()) return '';
+
+    return `<div class="hk-ai-root ${ui.aiOpen ? 'open' : ''}" id="hk-ai-root">
+      <button type="button" class="hk-ai-fab" id="hk-ai-toggle" aria-label="Open HK AI">
+        <span class="hk-ai-fab-mark">AI</span>
+      </button>
+      <section class="hk-ai-panel" id="hk-ai-panel" aria-label="HK AI assistant">
+        <header class="hk-ai-header">
+          <div>
+            <p class="eyebrow">Assistant</p>
+            <h3>HK AI</h3>
+          </div>
+          <button type="button" class="hk-ai-close" id="hk-ai-close" aria-label="Close HK AI">Close</button>
+        </header>
+        <div class="hk-ai-messages" id="hk-ai-messages">
+          ${renderAiMessages()}
+          ${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}
+        </div>
+        <form class="hk-ai-compose" id="hk-ai-form">
+          <input id="hk-ai-input" placeholder="Open YouTube, add task, check habits..." autocomplete="off" ${ui.aiLoading ? 'disabled' : ''} />
+          <button type="submit" ${ui.aiLoading ? 'disabled' : ''}>Send</button>
+        </form>
+        <p class="hk-ai-footnote">Chats are temporary. Only dashboard changes are saved.</p>
+      </section>
+    </div>`;
+  }
+
+  function refreshAiPanel() {
+    const messages = document.getElementById('hk-ai-messages');
+    if (!messages) return;
+    messages.innerHTML = `${renderAiMessages()}${ui.aiLoading ? '<div class="hk-ai-msg hk-ai-msg-assistant hk-ai-msg-loading">Thinking...</div>' : ''}`;
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  async function sendAiMessage(text) {
+    const message = String(text || '').trim();
+    if (!message || ui.aiLoading) return;
+
+    aiMessages.push({ role: 'user', text: message });
+    ui.aiLoading = true;
+    refreshAiPanel();
+
+    const localAction = parseClientAiAction(message);
+    if (localAction) {
+      aiMessages.push({ role: 'assistant', text: executeAiAction(localAction) });
+      ui.aiLoading = false;
+      refreshAiPanel();
+      document.getElementById('hk-ai-input')?.focus({ preventScroll: true });
+      return;
+    }
+
+    try {
+      const payload = await aiApiRequest({
+        message,
+        context: buildAiContext(),
+        history: aiMessages.slice(-10)
+      });
+
+      const reply = executeAiAction(payload.result);
+      aiMessages.push({ role: 'assistant', text: reply });
+    } catch (error) {
+      const fallback = parseClientAiAction(message);
+      aiMessages.push({
+        role: 'assistant',
+        text: fallback
+          ? executeAiAction(fallback)
+          : 'I could not reach the AI service right now. Try a direct command like "open YouTube", "add task buy milk", or "list habits".'
+      });
+    } finally {
+      ui.aiLoading = false;
+      const panel = document.getElementById('hk-ai-messages');
+      if (panel) {
+        refreshAiPanel();
+        document.getElementById('hk-ai-input')?.focus({ preventScroll: true });
+      } else {
+        render();
+      }
+    }
+  }
+
+  function bindAiEvents() {
+    document.getElementById('hk-ai-toggle')?.addEventListener('click', () => {
+      ui.aiOpen = !ui.aiOpen;
+      render();
+      if (ui.aiOpen) document.getElementById('hk-ai-input')?.focus({ preventScroll: true });
+    });
+
+    document.getElementById('hk-ai-close')?.addEventListener('click', () => {
+      ui.aiOpen = false;
+      render();
+    });
+
+    document.getElementById('hk-ai-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = document.getElementById('hk-ai-input');
+      const value = input?.value || '';
+      if (input) input.value = '';
+      sendAiMessage(value);
+    });
+  }
+
   function render() {
     if (!isDashboardUnlocked()) {
       root.innerHTML = renderPasswordGate();
@@ -2934,6 +3412,8 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         ${renderPicks()}
         ${renderGrowth()}
         ${renderGallery()}
+        ${renderAccount()}
+        ${renderStoragePanel()}
       </section>
     </main>
     ${renderFileModal()}${renderAiPanel()}`;
@@ -2947,12 +3427,12 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       aiMessagesEl.scrollTop = ui.aiOpen ? Math.max(aiScrollTop, aiMessagesEl.scrollHeight - aiMessagesEl.clientHeight) : aiScrollTop;
     }
     startClockTicker();
+    bootOneSignal({ requestPermission: true });
+    if (!calendarDeepLinkHandled && window.location.pathname === '/calendar') {
+      calendarDeepLinkHandled = true;
+      document.querySelector('.calendar-panel')?.scrollIntoView({ block: 'start' });
+    }
   }
-
-  function bindEvents() {
-    const byId = (id) => document.getElementById(id);
-    byId('clear-notice')?.addEventListener('click', () => {
-      notice = '';
       render();
     });
 
@@ -2977,6 +3457,10 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
 
     document.querySelectorAll('[data-event-delete]').forEach((button) => {
       button.addEventListener('click', () => deleteEvent(button.dataset.eventDelete));
+    });
+
+    document.querySelectorAll('[data-event-notify]').forEach((button) => {
+      button.addEventListener('click', () => toggleEventNotifications(button.dataset.eventNotify));
     });
 
     byId('add-event')?.addEventListener('click', addEvent);
@@ -3406,18 +3890,38 @@ function deleteTask(id) {
 
   function finishEvent(id) {
     if (!id) return;
+    mutate((current) => {
+      const target = current.events.find((event) => event.id === id);
+      if (!target) return current;
+      const completedAt = new Date().toISOString();
+      const completed = historyFromEvent({
+        ...target,
+        completed: true,
+        done: true,
+        completedAt
+      });
+      return {
+        ...current,
+        events: current.events.filter((event) => event.id !== id),
+        eventHistory: [completed, ...current.eventHistory.filter((event) => event.originalEventId !== id)]
+      };
+    });
+  }
+
+  function toggleEventNotifications(id) {
+    if (!id) return;
     mutate((current) => ({
       ...current,
       events: current.events.map((event) =>
         event.id === id
           ? {
               ...event,
-              done: true,
-              completedAt: new Date().toISOString()
+              notificationEnabled: event.notificationEnabled === false
             }
           : event
       )
     }));
+    requestOneSignalPermission();
   }
 
   function deleteEvent(id) {
@@ -3433,6 +3937,7 @@ function deleteTask(id) {
     const title = document.getElementById('event-title')?.value.trim();
     const date = document.getElementById('event-date')?.value || ui.selectedDate || todayKey(1);
     const time = document.getElementById('event-time')?.value || '';
+    const notificationEnabled = document.getElementById('event-notify')?.checked !== false;
     if (!title) return;
 
     mutate((current) => ({
@@ -3444,12 +3949,17 @@ function deleteTask(id) {
           title,
           date,
           time,
+          completed: false,
           done: false,
+          notificationEnabled,
+          notificationFlags: normalizeNotificationFlags(),
+          timeZone: config.REMINDER_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
           createdAt: new Date().toISOString()
         }
       ]
     }));
     ui.selectedDate = date;
+    if (notificationEnabled) requestOneSignalPermission();
   }
 
   function addPick() {

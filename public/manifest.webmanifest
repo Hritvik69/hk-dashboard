@@ -1,0 +1,17 @@
+{
+  "name": "HK Dashboard",
+  "short_name": "HK",
+  "start_url": "/calendar",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090d19",
+  "theme_color": "#0b1020",
+  "icons": [
+    {
+      "src": "/hk-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

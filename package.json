@@ -11,12 +11,15 @@
     "dev": "vite --host 0.0.0.0",
     "prebuild": "node scripts/write-env.mjs",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "prepreview": "node scripts/write-env.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "sync:odysseus": "node scripts/sync-odysseus.mjs",
     "test:scorer": "node scripts/test-scorer.cjs"
   },
   "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
     "vite": "^8.0.16"
   },
   "dependencies": {

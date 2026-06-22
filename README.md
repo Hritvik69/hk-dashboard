@@ -74,6 +74,25 @@ After deploying those env vars, open the dashboard once on the laptop browser th
 
 Dashboard data is kept until you remove it. Notes, tasks, calendar items, stock picks, growth habits, albums, and files all have remove controls; cloud files and synced stock-pick rows are deleted from Supabase too.
 
+## Smart Calendar Reminders
+
+Calendar items include push reminders through OneSignal, Supabase, and Vercel Cron.
+
+1. Run `supabase/schema.sql` or `supabase/migrations/20250121_add_notifications_to_events.sql` in Supabase.
+2. Create a OneSignal Web Push app for your production dashboard origin.
+3. Add the public browser env vars:
+   - `VITE_ONESIGNAL_APP_ID`
+   - `VITE_ONESIGNAL_EXTERNAL_ID=hk-dashboard` for shared password-only dashboards, or any stable id you want every device to use
+   - `VITE_REMINDER_TIME_ZONE=Asia/Kolkata`
+4. Add the server-only Vercel env vars:
+   - `ONESIGNAL_APP_ID`
+   - `ONESIGNAL_REST_API_KEY`
+   - `ONESIGNAL_EXTERNAL_ID=hk-dashboard`
+   - `REMINDER_TIME_ZONE=Asia/Kolkata`
+   - `CRON_SECRET`
+
+Vercel calls `/api/reminders` every 15 minutes. The endpoint checks upcoming events, claims each reminder in `notification_log`, sends OneSignal push notifications once, moves completed events into Completed History, and opens `/calendar` when a notification is clicked.
+
 ## Gallery Albums
 
 Gallery & Files supports albums/folders. Uploads are saved into the selected album. Locked albums use a separate album password, so private folders can be opened only after unlocking them.

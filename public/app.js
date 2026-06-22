@@ -61,6 +61,7 @@ const ui = {
     albumError: '',
     gateError: '',
     editingNoteId: '',
+    expandedNotes: {},
     openBreakdownPickId: '',
     aiOpen: false,
     aiLoading: false,
@@ -524,6 +525,43 @@ const ui = {
     const units = ['B', 'KB', 'MB', 'GB'];
     const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
     return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+  }
+
+  function visualNoteText(value, { preview = false } = {}) {
+    const text = String(value || '').replace(/\r\n?/g, '\n');
+    const source = preview ? text.split('\n').slice(0, 5).join('\n') : text;
+    return source.replace(/https?:\/\/[^\s<>"']{32,}/g, (url) => `${url.slice(0, 31)}...`);
+  }
+
+  function noteNeedsExpansion(note) {
+    const body = String(note?.body || '');
+    const codeBlocks = Array.isArray(note?.codeBlocks) ? note.codeBlocks : [];
+    return body.length > 360 || body.split(/\r\n?|\n/).length > 5 || codeBlocks.length > 0;
+  }
+
+  function renderNoteCodeBlocks(note) {
+    const codeBlocks = Array.isArray(note?.codeBlocks) ? note.codeBlocks : [];
+    if (!codeBlocks.length) return '';
+    return codeBlocks
+      .map((block, blockIndex) => {
+        const blockId = `${escapeHtml(note.id)}-${blockIndex}`;
+        const lang = String(block?.lang || 'text').trim() || 'text';
+        const content = String(block?.content || '');
+        return `<div class="note-code-block">
+          <div class="note-code-block-header">
+            <span class="lang-label">${escapeHtml(lang)}</span>
+            <button type="button" class="copy-button" data-note-copy-code="${blockId}">Copy</button>
+          </div>
+          <pre data-note-code-content="${blockId}">${escapeHtml(content)}</pre>
+        </div>`;
+      })
+      .join('');
+  }
+
+  function renderNoteContent(note, expanded = false) {
+    const body = visualNoteText(note?.body || '', { preview: !expanded });
+    const codeBlocksHtml = expanded ? renderNoteCodeBlocks(note) : '';
+    return `<p class="note-body ${expanded ? 'expanded' : 'clamped'}">${escapeHtml(body || 'No content')}</p>${codeBlocksHtml}`;
   }
 
   function fileUrl(file) {

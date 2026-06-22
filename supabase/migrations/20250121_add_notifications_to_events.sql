@@ -1,53 +1,9 @@
-create table if not exists public.dashboard_state (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  data jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
-);
+-- Migration: Add smart reminder notification logs and completed event history.
+-- Run this in Supabase SQL Editor
 
-alter table public.dashboard_state enable row level security;
-
-drop policy if exists "dashboard_state_select_own" on public.dashboard_state;
-create policy "dashboard_state_select_own"
-on public.dashboard_state for select
-to authenticated
-using (auth.uid() = user_id);
-
-drop policy if exists "dashboard_state_insert_own" on public.dashboard_state;
-create policy "dashboard_state_insert_own"
-on public.dashboard_state for insert
-to authenticated
-with check (auth.uid() = user_id);
-
-drop policy if exists "dashboard_state_update_own" on public.dashboard_state;
-create policy "dashboard_state_update_own"
-on public.dashboard_state for update
-to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
-
-create table if not exists public.tomorrow_picks (
-  id text primary key,
-  symbol text not null,
-  source text not null default 'ai',
-  score numeric,
-  signal text,
-  scanner text,
-  mode text,
-  data jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
-);
-
-create unique index if not exists tomorrow_picks_symbol_source_idx
-on public.tomorrow_picks (symbol, source);
-
-alter table public.tomorrow_picks enable row level security;
-
-drop policy if exists "tomorrow_picks_public_read" on public.tomorrow_picks;
-create policy "tomorrow_picks_public_read"
-on public.tomorrow_picks for select
-to anon, authenticated
-using (true);
-
+-- Events are stored in dashboard_state.data as JSONB. The app writes
+-- per-event notificationFlags there for quick state sync, and this table is
+-- the authoritative duplicate-send guard for cron/server delivery.
 create table if not exists public.notification_log (
   id uuid primary key default gen_random_uuid(),
   dashboard_id text not null,
@@ -90,6 +46,9 @@ to authenticated
 using (user_id is not null and auth.uid() = user_id)
 with check (user_id is not null and auth.uid() = user_id);
 
+-- Optional relational history mirror. The UI reads dashboard_state.data.eventHistory
+-- so shared/password-only dashboards work without auth, but this table remains
+-- available for authenticated reporting or future exports.
 create table if not exists public.event_history (
   id uuid primary key default gen_random_uuid(),
   dashboard_id text not null,
@@ -120,49 +79,3 @@ create policy "event_history_insert_own"
 on public.event_history for insert
 to authenticated
 with check (user_id is not null and auth.uid() = user_id);
-
-insert into storage.buckets (id, name, public, file_size_limit)
-values ('dashboard-files', 'dashboard-files', false, 104857600)
-on conflict (id) do update
-set public = excluded.public,
-    file_size_limit = excluded.file_size_limit;
-
-drop policy if exists "dashboard_files_select_own" on storage.objects;
-create policy "dashboard_files_select_own"
-on storage.objects for select
-to authenticated
-using (
-  bucket_id = 'dashboard-files'
-  and split_part(name, '/', 1) = auth.uid()::text
-);
-
-drop policy if exists "dashboard_files_insert_own" on storage.objects;
-create policy "dashboard_files_insert_own"
-on storage.objects for insert
-to authenticated
-with check (
-  bucket_id = 'dashboard-files'
-  and split_part(name, '/', 1) = auth.uid()::text
-);
-
-drop policy if exists "dashboard_files_update_own" on storage.objects;
-create policy "dashboard_files_update_own"
-on storage.objects for update
-to authenticated
-using (
-  bucket_id = 'dashboard-files'
-  and split_part(name, '/', 1) = auth.uid()::text
-)
-with check (
-  bucket_id = 'dashboard-files'
-  and split_part(name, '/', 1) = auth.uid()::text
-);
-
-drop policy if exists "dashboard_files_delete_own" on storage.objects;
-create policy "dashboard_files_delete_own"
-on storage.objects for delete
-to authenticated
-using (
-  bucket_id = 'dashboard-files'
-  and split_part(name, '/', 1) = auth.uid()::text
-);

@@ -489,6 +489,55 @@ h3 {
   margin-top: 14px;
 }
 
+/* Notes grid - masonry/auto-fill layout for Notion-style cards */
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+@media (max-width: 760px) {
+  .notes-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* Show More / Show Less toggle */
+.note-show-toggle {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  color: var(--cyan);
+  background: rgba(73, 215, 233, 0.08);
+  border: 1px solid rgba(73, 215, 233, 0.28);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.note-show-toggle:hover {
+  background: rgba(73, 215, 233, 0.16);
+  border-color: rgba(73, 215, 233, 0.5);
+}
+
+/* Card title and actions layout */
+.note-card-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 0;
+}
+
+.note-card-actions {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
 .task-item,
 .note-card,
 .list-item,
@@ -539,10 +588,51 @@ h3 {
 }
 
 .note-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 110px;
+  max-height: 220px;
   padding: 12px;
-  margin-bottom: 8px;
   min-width: 0;
   overflow: hidden;
+}
+
+.note-card.expanded {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.note-card.expanded .note-body {
+  -webkit-line-clamp: unset;
+  display: block;
+  max-height: 300px;
+  overflow-y: auto;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Custom scrollbar for expanded cards - matching dark theme */
+.note-card.expanded::-webkit-scrollbar,
+.note-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.note-card.expanded::-webkit-scrollbar-track,
+.note-body::-webkit-scrollbar-track {
+  background: rgba(7, 11, 22, 0.4);
+  border-radius: 3px;
+}
+
+.note-card.expanded::-webkit-scrollbar-thumb,
+.note-body::-webkit-scrollbar-thumb {
+  background: rgba(73, 215, 233, 0.3);
+  border-radius: 3px;
+}
+
+.note-card.expanded::-webkit-scrollbar-thumb:hover,
+.note-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(73, 215, 233, 0.5);
 }
 
 .card-title-row {
@@ -566,13 +656,26 @@ h3 {
 
 .note-card .note-body {
   margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
   line-height: 1.5;
   max-width: 100%;
-  max-height: 340px;
-  overflow: auto;
+  /* Clamp to 5 lines by default */
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* URL styling - visually shorten long URLs while preserving full text */
+.note-card .note-body a {
+  color: var(--cyan);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  display: inline;
 }
 
 .note-top-actions {

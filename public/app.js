@@ -2021,7 +2021,9 @@ const ui = {
           .slice(0, 6)
           .map((note) => {
             const isEditing = ui.editingNoteId === note.id;
+            const isExpanded = Boolean(ui.expandedNotes[note.id]);
             const codeBlocks = Array.isArray(note.codeBlocks) ? note.codeBlocks : [];
+            const hasLongContent = (note.body || '').length > 200;
             const noteActions = isEditing
               ? `<div class="note-top-actions">
                   <button type="button" class="remove-button" data-note-cancel="${escapeHtml(note.id)}">Cancel</button>
@@ -2035,9 +2037,21 @@ const ui = {
             const titleField = isEditing
               ? `<input class="note-title-input" data-note-title-input="${escapeHtml(note.id)}" value="${escapeHtml(note.title || '')}" placeholder="Title" />`
               : `<strong>${escapeHtml(note.title || 'Untitled note')}</strong>`;
+            
+            // Build note body with proper URL handling
+            let bodyContent = note.body || '';
+            // Convert URLs to clickable links while keeping text intact
+            bodyContent = bodyContent.replace(/(https?:\/\/[^\s<>"\]]+)/g, '<a href="$1" target="_blank" rel="noreferrer">$1</a>');
+            
             const bodyField = isEditing
               ? `<textarea wrap="soft" data-note-body-input="${escapeHtml(note.id)}" placeholder="Write your note...">${escapeHtml(note.body || '')}</textarea>`
-              : `<p class="note-body">${escapeHtml(note.body || '')}</p>`;
+              : `<p class="note-body">${bodyContent}</p>`;
+            
+            // Show More / Show Less toggle for long content
+            const showMoreToggle = (!isEditing && hasLongContent)
+              ? `<button type="button" class="note-show-toggle" data-note-toggle="${escapeHtml(note.id)}">${isExpanded ? 'Show Less ▲' : 'Show More ▼'}</button>`
+              : '';
+            
             const codeBlocksHtml = codeBlocks.length
               ? codeBlocks
                   .map((block, blockIndex) => {
@@ -2068,14 +2082,19 @@ const ui = {
                   <button type="button" class="add-code-button" data-note-code-add="${escapeHtml(note.id)}">+ Add code</button>
                 </div>`
               : '';
-            return `<div class="note-card ${isEditing ? 'editing' : ''}">
-              <div class="card-title-row">
-                ${titleField}
+            return `<div class="note-card ${isEditing ? 'editing' : ''} ${isExpanded ? 'expanded' : ''}" data-note-id="${escapeHtml(note.id)}">
+              <div class="note-card-inner">
+                <div class="card-title-row">
+                  ${titleField}
+                </div>
+                ${bodyField}
+                ${showMoreToggle}
+                ${codeBlocksHtml}
+                ${addCodeRow}
+              </div>
+              <div class="note-card-actions">
                 ${noteActions}
               </div>
-              ${bodyField}
-              ${codeBlocksHtml}
-              ${addCodeRow}
             </div>`;
           })
           .join('')
@@ -2100,7 +2119,7 @@ const ui = {
       <textarea id="note-text" placeholder="Write a longer note..." rows="4"></textarea>
       <div class="split-list">
         <div><h3>Todo/tasks</h3>${tasksHtml}</div>
-        <div><h3>Notes</h3>${notesHtml}</div>
+        <div><h3>Notes</h3><div class="notes-grid">${notesHtml}</div></div>
       </div>
     </article>`;
   }
@@ -4241,6 +4260,29 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
 
     document.querySelectorAll('[data-note-copy]').forEach((button) => {
       button.addEventListener('click', (event) => copyNote(event.currentTarget));
+    });
+
+    // Show More / Show Less toggle for notes
+    document.querySelectorAll('[data-note-toggle]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const noteId = button.dataset.noteToggle;
+        if (ui.expandedNotes[noteId]) {
+          delete ui.expandedNotes[noteId];
+        } else {
+          ui.expandedNotes[noteId] = true;
+        }
+        // Toggle expanded class on the card without re-rendering everything
+        const card = document.querySelector(`.note-card[data-note-id="${CSS.escape(noteId)}"]`);
+        if (card) {
+          if (ui.expandedNotes[noteId]) {
+            card.classList.add('expanded');
+            button.textContent = 'Show Less ▲';
+          } else {
+            card.classList.remove('expanded');
+            button.textContent = 'Show More ▼';
+          }
+        }
+      });
     });
 
     document.querySelectorAll('[data-note-code-add]').forEach((button) => {

@@ -91,7 +91,34 @@ Calendar items include push reminders through OneSignal, Supabase, and Vercel Cr
    - `REMINDER_TIME_ZONE=Asia/Kolkata`
    - `CRON_SECRET`
 
-Vercel calls `/api/reminders` every 15 minutes. The endpoint checks upcoming events, claims each reminder in `notification_log`, sends OneSignal push notifications once, moves completed events into Completed History, and opens `/calendar` when a notification is clicked.
+Vercel calls `/api/reminders` once a day (Hobby-plan safe). The endpoint checks upcoming events, claims each reminder in `notification_log`, sends OneSignal push notifications once, moves completed events into Completed History, and opens `/calendar` when a notification is clicked.
+
+> **Heads-up on cadence.** Vercel's free Hobby plan caps cron at once per day, so the in-platform cron alone is too coarse for the 2-day / 1-day / 3-hour / start-time reminder windows. For reliable near-real-time reminders, point an **external free scheduler** at the same endpoint. This keeps the project on the free tier while still firing reminders on time.
+
+### Free external scheduler (recommended on Hobby)
+
+[cron-job.org](https://cron-job.org) is free and pings an arbitrary URL on any schedule. Set it up as the primary 15-minute driver:
+
+1. Create a free account at [cron-job.org](https://cron-job.org).
+2. **Create Cronjob** with these values:
+   - **Title:** `HK Dashboard reminders`
+   - **URL:** `https://hk-dashboard-omega.vercel.app/api/reminders`
+   - **Execution schedule:** Every 15 minutes (`*/15 * * * *`)
+   - **Request method:** `GET`
+   - **Headers:** add a custom header
+     - **Key:** `Authorization`
+     - **Value:** `Bearer <CRON_SECRET>` (same value as the `CRON_SECRET` env var in Vercel)
+3. Save and enable. cron-job.org will hit your endpoint every 15 minutes; `/api/reminders` authenticates the `Bearer` token exactly the same way it authenticates Vercel's own cron.
+
+Other free alternatives that work the same way: [EasyCron](https://www.easycron.com), [SetCronJob](https://www.setcronjob.com), or a single GitHub Actions workflow. Point any of them at `/api/reminders` with the `Authorization: Bearer <CRON_SECRET>` header.
+
+### Test the cron manually
+
+```powershell
+curl "https://hk-dashboard-omega.vercel.app/api/reminders" -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+A healthy response looks like `{"ok":true,"checked":N,"sent":N,"completed":N,"changed":...}`. If you see `401 Unauthorized`, the `CRON_SECRET` header value does not match the env var.
 
 ## Gallery Albums
 

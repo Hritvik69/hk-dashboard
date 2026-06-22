@@ -2105,7 +2105,7 @@ h3 {
 
 .growth-radar {
   width: 100%;
-  max-width: 360px;
+  max-width: 500px;
   height: auto;
   overflow: visible;
   filter: drop-shadow(0 0 18px rgba(73, 215, 233, 0.18));

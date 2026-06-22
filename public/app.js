@@ -2359,7 +2359,6 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     const tasksBytes   = jsonBytes(state.tasks);
     const calBytes     = jsonBytes(state.events) + jsonBytes(state.eventHistory);
     const habitsBytes  = jsonBytes(state.habits);
-    const picksBytes   = jsonBytes(state.picks);
     const growthBytes  = jsonBytes(state.skills) + jsonBytes(state.growthStartDate);
 
     // Gallery: use stored size field when available (real file size), else estimate from dataUrl
@@ -2370,7 +2369,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       return sum;
     }, 0);
 
-    const totalTracked = notesBytes + tasksBytes + calBytes + habitsBytes + picksBytes + galleryBytes + growthBytes;
+    const totalTracked = notesBytes + tasksBytes + calBytes + habitsBytes + galleryBytes + growthBytes;
 
     // LocalStorage quota is typically 5 MB (some browsers 10 MB)
     const LS_QUOTA = 5 * 1024 * 1024;
@@ -2387,7 +2386,6 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         { key: 'calendar', label: 'Calendar',        icon: '📅', bytes: calBytes,    count: state.events.length + state.eventHistory.length, color: '#63d297' },
         { key: 'habits',   label: 'Habits',          icon: '🔥', bytes: habitsBytes, count: state.habits.length,              color: '#ff5c7a' },
         { key: 'gallery',  label: 'Gallery & Files', icon: '🖼️', bytes: galleryBytes,count: (state.photos || []).length,      color: '#8b5cf6' },
-        { key: 'picks',    label: 'Stock Picks',     icon: '📈', bytes: picksBytes,  count: state.picks.length,               color: '#81e6d9' },
         { key: 'growth',   label: 'Growth Dashboard', icon: '📊', bytes: growthBytes, count: state.skills.length,              color: '#63d297' }
       ]
     };
@@ -2799,11 +2797,11 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
       const labelY = Math.max(-2, Math.min(294, lp.y));
       let anchor = Math.abs(lp.x - GROWTH_RADAR.cx) < 12 ? 'middle' : lp.x > GROWTH_RADAR.cx ? 'start' : 'end';
       if (lp.x < GROWTH_RADAR.cx - 80) {
-        labelX = -14;
-        anchor = 'start';
-      } else if (lp.x > GROWTH_RADAR.cx + 80) {
-        labelX = 314;
+        labelX = 10;
         anchor = 'end';
+      } else if (lp.x > GROWTH_RADAR.cx + 80) {
+        labelX = 290;
+        anchor = 'start';
       }
       return `<g class="growth-axis-label" data-skill-axis-label="${escapeHtml(def.id)}">
           <text class="growth-axis-title" x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${anchor}">${def.icon} ${escapeHtml(def.title)}</text>
@@ -2811,7 +2809,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         </g>`;
     }).join('');
 
-    return `<svg class="growth-radar" viewBox="-20 -20 340 340" role="img" aria-label="Personal growth radar chart">
+    return `<svg class="growth-radar" viewBox="-100 -20 500 340" role="img" aria-label="Personal growth radar chart">
         ${rings}
         ${spokes}
         <polygon class="growth-fill" id="growth-radar-polygon" points="${escapeHtml(polygonPoints)}" />

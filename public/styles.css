@@ -1285,6 +1285,64 @@ h3 {
   gap: 10px;
 }
 
+/* ── Drag-and-drop zone ── */
+.drop-zone {
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  padding: 24px 16px;
+  border: 2px dashed rgba(73, 215, 233, 0.24);
+  border-radius: 10px;
+  background: rgba(7, 11, 22, 0.32);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.drop-zone-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(154, 167, 189, 0.6);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.drop-icon {
+  font-size: 20px;
+  color: var(--cyan);
+  opacity: 0.5;
+}
+
+.gallery-panel.drag-over .drop-zone,
+.gallery-panel.drag-over {
+  border-color: rgba(73, 215, 233, 0.7);
+  background: rgba(73, 215, 233, 0.06);
+}
+
+.gallery-panel.drag-over .drop-zone {
+  border-color: var(--cyan);
+  background: rgba(73, 215, 233, 0.1);
+}
+
+.gallery-panel.drag-over .drop-zone-hint {
+  color: var(--cyan);
+}
+
+.gallery-panel.drag-over .drop-icon {
+  opacity: 1;
+  animation: drop-bounce 0.6s ease infinite alternate;
+}
+
+@keyframes drop-bounce {
+  from { transform: translateY(-3px); }
+  to   { transform: translateY(3px); }
+}
+
+.gallery-panel.drag-over .photo-grid {
+  opacity: 0.4;
+}
+
 .file-card {
   margin: 0;
   overflow: hidden;

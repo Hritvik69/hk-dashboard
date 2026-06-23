@@ -2287,7 +2287,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
           .join('')
       : '<p class="empty">No files yet</p>';
 
-    return `<article class="panel gallery-panel">
+    return `<article class="panel gallery-panel" id="gallery-panel">
       <header class="panel-header">
         <div>
           <p class="eyebrow">Gallery &amp; Files</p>
@@ -2305,7 +2305,15 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
         <button type="button" id="add-album">Add album</button>
       </div>
       <div class="album-tabs">${albumTabs}</div>
-      ${locked ? lockedHtml : `<div class="photo-grid">${filesHtml}</div>`}
+      ${locked ? lockedHtml : `
+        <div class="drop-zone" id="gallery-drop-zone">
+          <div class="drop-zone-hint">
+            <span class="drop-icon">&#8595;</span>
+            <span>Drag &amp; drop files here &middot; or paste images from clipboard</span>
+          </div>
+        </div>
+        <div class="photo-grid">${filesHtml}</div>
+      `}
     </article>`;
   }
 
@@ -4339,6 +4347,16 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
       if (event.target.classList.contains('file-modal')) closeFile();
     });
 
+    // Drag-and-drop + paste for Gallery & Files panel.
+    const galleryPanel = byId('gallery-panel');
+    if (galleryPanel) {
+      galleryPanel.addEventListener('dragover', handleGalleryDragOver);
+      galleryPanel.addEventListener('dragenter', handleGalleryDragEnter);
+      galleryPanel.addEventListener('dragleave', handleGalleryDragLeave);
+      galleryPanel.addEventListener('drop', handleGalleryDrop);
+      galleryPanel.addEventListener('paste', handleGalleryPaste);
+    }
+
     bindGrowthEvents();
   }
 
@@ -5065,9 +5083,8 @@ function selectAlbum(id) {
     }
   }
 
-async function addFiles(event) {
-    const selected = Array.from((event.target.files || [])).filter(Boolean);
-    event.target.value = '';
+async function uploadFiles(files) {
+    const selected = Array.from(files).filter(Boolean);
     if (!selected.length) return;
     const album = activeAlbum();
     if (!album || !isAlbumUnlocked(album)) {
@@ -5100,6 +5117,79 @@ async function addFiles(event) {
       setNotice(`${localCount} file${localCount === 1 ? '' : 's'} saved in this browser only — cloud storage was not ready.`);
     } else {
       setNotice(`${cloudCount} file${cloudCount === 1 ? '' : 's'} saved to cloud storage.`);
+    }
+  }
+
+  async function addFiles(event) {
+    const selected = Array.from((event.target.files || [])).filter(Boolean);
+    event.target.value = '';
+    if (!selected.length) return;
+    await uploadFiles(selected);
+  }
+
+  function handleGalleryDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const panel = document.getElementById('gallery-panel');
+    if (panel) panel.classList.remove('drag-over');
+    const items = event.dataTransfer?.items;
+    if (!items || !items.length) return;
+    const files = [];
+    const album = activeAlbum();
+    if (!album || !isAlbumUnlocked(album)) {
+      setNotice('Unlock this album before uploading files.');
+      return;
+    }
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry && entry.isDirectory) continue;
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length) uploadFiles(files);
+  }
+
+  function handleGalleryDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleGalleryDragEnter(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const panel = document.getElementById('gallery-panel');
+    if (panel) panel.classList.add('drag-over');
+  }
+
+  function handleGalleryDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const panel = document.getElementById('gallery-panel');
+    if (panel && !panel.contains(event.relatedTarget)) {
+      panel.classList.remove('drag-over');
+    }
+  }
+
+  async function handleGalleryPaste(event) {
+    const album = activeAlbum();
+    if (!album || !isAlbumUnlocked(album)) return;
+    const items = event.clipboardData?.items;
+    if (!items || !items.length) return;
+    const files = [];
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) {
+          const named = new File([file], file.name || `pasted-image-${Date.now()}.${file.type.split('/')[1] || 'png'}`, { type: file.type });
+          files.push(named);
+        }
+      }
+    }
+    if (files.length) {
+      event.preventDefault();
+      await uploadFiles(files);
     }
   }
 

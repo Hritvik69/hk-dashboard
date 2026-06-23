@@ -4347,15 +4347,19 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
       if (event.target.classList.contains('file-modal')) closeFile();
     });
 
-    // Drag-and-drop + paste for Gallery & Files panel.
+    // Drag-and-drop for Gallery & Files panel.
     const galleryPanel = byId('gallery-panel');
     if (galleryPanel) {
       galleryPanel.addEventListener('dragover', handleGalleryDragOver);
       galleryPanel.addEventListener('dragenter', handleGalleryDragEnter);
       galleryPanel.addEventListener('dragleave', handleGalleryDragLeave);
       galleryPanel.addEventListener('drop', handleGalleryDrop);
-      galleryPanel.addEventListener('paste', handleGalleryPaste);
     }
+
+    // Paste — listen on document so Ctrl+V / Cmd+V works from anywhere.
+    // Only intercepts when clipboard contains file-type items (images, files).
+    // Text pastes pass through to their target input/textarea normally.
+    document.addEventListener('paste', handleGalleryPaste);
 
     bindGrowthEvents();
   }
@@ -5173,8 +5177,6 @@ async function uploadFiles(files) {
   }
 
   async function handleGalleryPaste(event) {
-    const album = activeAlbum();
-    if (!album || !isAlbumUnlocked(album)) return;
     const items = event.clipboardData?.items;
     if (!items || !items.length) return;
     const files = [];
@@ -5182,15 +5184,20 @@ async function uploadFiles(files) {
       if (item.kind === 'file') {
         const file = item.getAsFile();
         if (file) {
-          const named = new File([file], file.name || `pasted-image-${Date.now()}.${file.type.split('/')[1] || 'png'}`, { type: file.type });
-          files.push(named);
+          const ext = (file.type.split('/')[1] || 'png').replace('+xml', '').replace('jpeg', 'jpg');
+          const name = file.name || `pasted-image-${Date.now()}.${ext}`;
+          files.push(new File([file], name, { type: file.type }));
         }
       }
     }
-    if (files.length) {
-      event.preventDefault();
-      await uploadFiles(files);
+    if (!files.length) return;
+    event.preventDefault();
+    const album = activeAlbum();
+    if (!album || !isAlbumUnlocked(album)) {
+      setNotice('Unlock this album before pasting files.');
+      return;
     }
+    await uploadFiles(files);
   }
 
   async function createLocalFileRecord(file, albumId = DEFAULT_ALBUM_ID) {

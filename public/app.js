@@ -1964,7 +1964,6 @@ const ui = {
 
     const historyHtml = state.eventHistory.length
       ? state.eventHistory
-          .slice(0, 8)
           .map((event) => {
             const when = [formatDisplayDate(event.date), event.time || 'All day'].filter(Boolean).join(' · ');
             return `<div class="list-item event-item history-item">
@@ -1993,8 +1992,8 @@ const ui = {
         <label class="checkbox-line notify-line"><input id="event-notify" type="checkbox" checked />Notify</label>
         <button type="button" id="add-event">Add</button>
       </div>
-      <div class="list-block"><h3>${formatDisplayDate(ui.selectedDate)}</h3>${eventsHtml}</div>
-      <div class="list-block history-block"><h3>Completed History</h3>${historyHtml}</div>
+      <div class="list-block"><h3>${formatDisplayDate(ui.selectedDate)}</h3><div class="scroll-box calendar-scroll">${eventsHtml}</div></div>
+      <div class="list-block history-block"><h3>Completed History</h3><div class="scroll-box calendar-scroll">${historyHtml}</div></div>
     </article>`;
   }
 
@@ -2002,7 +2001,6 @@ const ui = {
     const openTasks = state.tasks.filter((task) => !task.done);
     const tasksHtml = state.tasks.length
       ? state.tasks
-          .slice(0, 8)
           .map((task) => {
             return `<div class="task-item ${task.done ? 'done' : ''}">
               <button type="button" class="task-toggle" data-task="${escapeHtml(task.id)}">
@@ -2018,7 +2016,6 @@ const ui = {
 
     const notesHtml = state.notes.length
       ? state.notes
-          .slice(0, 6)
           .map((note) => {
             const isEditing = ui.editingNoteId === note.id;
             const codeBlocks = Array.isArray(note.codeBlocks) ? note.codeBlocks : [];
@@ -2099,8 +2096,8 @@ const ui = {
       </div>
       <textarea id="note-text" placeholder="Write a longer note..." rows="4"></textarea>
       <div class="split-list">
-        <div><h3>Todo/tasks</h3>${tasksHtml}</div>
-        <div><h3>Notes</h3>${notesHtml}</div>
+        <div><h3>Todo/tasks</h3><div class="scroll-box notes-scroll">${tasksHtml}</div></div>
+        <div><h3>Notes</h3><div class="scroll-box notes-scroll">${notesHtml}</div></div>
       </div>
     </article>`;
   }
@@ -2282,7 +2279,6 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     </div>`;
     const filesHtml = visibleFiles.length
       ? visibleFiles
-          .slice(0, 8)
           .map(renderFileCard)
           .join('')
       : '<p class="empty">No files yet</p>';
@@ -2312,7 +2308,7 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
             <span>Drag &amp; drop files here &middot; or paste images from clipboard</span>
           </div>
         </div>
-        <div class="photo-grid">${filesHtml}</div>
+        <div class="scroll-box gallery-scroll">${filesHtml ? `<div class="photo-grid">${filesHtml}</div>` : filesHtml}</div>
       `}
     </article>`;
   }

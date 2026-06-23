@@ -489,6 +489,37 @@ h3 {
   margin-top: 14px;
 }
 
+/* ── Compact scrollable containers (keeps the page short while showing all items) ── */
+.scroll-box {
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(73, 215, 233, 0.4) transparent;
+}
+
+.scroll-box::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll-box::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-box::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(73, 215, 233, 0.3);
+}
+
+.scroll-box::-webkit-scrollbar-thumb:hover {
+  background: rgba(73, 215, 233, 0.5);
+}
+
+/* Gallery: taller to fit the 4-column grid nicely */
+.scroll-box.gallery-scroll {
+  max-height: 440px;
+}
+
 .task-item,
 .note-card,
 .list-item,

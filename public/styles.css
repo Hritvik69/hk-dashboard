@@ -2819,3 +2819,214 @@ h3 {
   }
 }
 
+/* ── Travels Panel ── */
+.travels-add-form {
+  padding: 18px;
+  margin-bottom: 20px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.travels-add-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-bottom: 14px;
+}
+
+.travels-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.travels-form-grid input,
+.travels-form-grid select {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.travels-form-grid input:focus,
+.travels-form-grid select:focus {
+  outline: none;
+  border-color: var(--accent2);
+}
+
+.travels-form-grid input[type="number"] {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.travels-form-grid button {
+  background: var(--accent2);
+  color: #08080c;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+
+.travels-form-grid button:hover {
+  opacity: 0.9;
+}
+
+.travels-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+.travels-empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.travels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.travel-card {
+  padding: 18px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.travel-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.travel-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.travel-country {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.travel-priority {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid;
+}
+
+.travel-coords {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+
+.travel-coord-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  margin-bottom: 3px;
+}
+
+.travel-coord-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.travel-notes {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.travel-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.travel-copy,
+.travel-remove {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 7px;
+  cursor: pointer;
+  border: 1px solid;
+}
+
+.travel-copy {
+  background: rgba(79, 209, 197, 0.1);
+  border-color: rgba(79, 209, 197, 0.3);
+  color: #4fd1c5;
+}
+
+.travel-remove {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #f87171;
+}
+
+.travels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.travel-list-item {
+  padding: 14px 18px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.travel-list-info {
+  flex: 1;
+}
+
+.travels-view-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.travels-view-btn.active {
+  background: rgba(79, 209, 197, 0.2);
+  border-color: #4fd1c5;
+  color: #4fd1c5;
+}
+

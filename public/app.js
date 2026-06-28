@@ -2242,6 +2242,98 @@ const ui = {
     </article>`;
   }
 
+  function renderTravels() {
+    const destinations = state.travels || [
+      { id: 1, name: 'Tokyo', country: 'Japan', lat: 35.6762, lng: 139.6503, notes: 'Cherry blossom season', priority: 'high' },
+      { id: 2, name: 'Reykjavik', country: 'Iceland', lat: 64.1466, lng: -21.9426, notes: 'Northern lights trip', priority: 'medium' },
+      { id: 3, name: 'Cape Town', country: 'South Africa', lat: -33.9249, lng: 18.4241, notes: 'Table Mountain & beaches', priority: 'low' },
+    ];
+    const view = ui.travelsView || 'grid';
+
+    const priorityColor = (p) => {
+      if (p === 'high') return '#f87171';
+      if (p === 'medium') return '#fbbf24';
+      return '#34d399';
+    };
+
+    const copyCoords = (lat, lng) => {
+      navigator.clipboard.writeText(`${lat}, ${lng}`);
+    };
+
+    const card = (d) => `
+      <div class="travel-card">
+        <div class="travel-card-top">
+          <div>
+            <div class="travel-name">${escapeHtml(d.name)}</div>
+            <div class="travel-country">${escapeHtml(d.country)}</div>
+          </div>
+          <span class="travel-priority" style="color:${priorityColor(d.priority)};border-color:${priorityColor(d.priority)}40;background:${priorityColor(d.priority)}18">${d.priority.toUpperCase()}</span>
+        </div>
+        <div class="travel-coords">
+          <div><span class="travel-coord-label">LAT</span><span class="travel-coord-val">${d.lat.toFixed(4)}</span></div>
+          <div><span class="travel-coord-label">LNG</span><span class="travel-coord-val">${d.lng.toFixed(4)}</span></div>
+        </div>
+        ${d.notes ? `<div class="travel-notes">${escapeHtml(d.notes)}</div>` : ''}
+        <div class="travel-actions">
+          <button type="button" class="travel-copy" data-lat="${d.lat}" data-lng="${d.lng}">COPY COORDS</button>
+          <button type="button" class="travel-remove" data-travel-id="${d.id}">REMOVE</button>
+        </div>
+      </div>`;
+
+    const listItem = (d) => `
+      <div class="travel-list-item">
+        <span class="travel-priority" style="color:${priorityColor(d.priority)};border-color:${priorityColor(d.priority)}40;background:${priorityColor(d.priority)}18">${d.priority.toUpperCase()}</span>
+        <div class="travel-list-info">
+          <div class="travel-name">${escapeHtml(d.name)}</div>
+          <div class="travel-country">${escapeHtml(d.country)}</div>
+        </div>
+        <div class="travel-coord-val">${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}</div>
+        ${d.notes ? `<div class="travel-notes" style="max-width:200px">${escapeHtml(d.notes)}</div>` : ''}
+        <div class="travel-actions">
+          <button type="button" class="travel-copy" data-lat="${d.lat}" data-lng="${d.lng}">COPY</button>
+          <button type="button" class="travel-remove" data-travel-id="${d.id}">&times;</button>
+        </div>
+      </div>`;
+
+    return `<article class="panel travels-panel">
+      <header class="panel-header">
+        <div><p class="eyebrow">Wanderlust</p><h2>${destinations.length} future destinations</h2></div>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="travels-view-btn ${view === 'grid' ? 'active' : ''}" data-view="grid">Grid</button>
+          <button type="button" class="travels-view-btn ${view === 'list' ? 'active' : ''}" data-view="list">List</button>
+        </div>
+      </header>
+
+      <div class="travels-add-form">
+        <div class="travels-add-title">ADD DESTINATION</div>
+        <div class="travels-form-grid">
+          <input id="travel-name" placeholder="City / Place" />
+          <input id="travel-country" placeholder="Country" />
+          <input id="travel-lat" placeholder="Latitude" style="font-family:monospace" />
+          <input id="travel-lng" placeholder="Longitude" style="font-family:monospace" />
+          <input id="travel-notes" placeholder="Notes / plans" />
+          <select id="travel-priority">
+            <option value="high">High Priority</option>
+            <option value="medium" selected>Medium Priority</option>
+            <option value="low">Low Priority</option>
+          </select>
+          <button type="button" id="add-travel">Add Destination</button>
+        </div>
+      </div>
+
+      ${destinations.length === 0 ? `
+        <div class="travels-empty">
+          <div class="travels-empty-icon">✈</div>
+          <div>No destinations yet — add your first dream location above</div>
+        </div>
+      ` : view === 'grid' ? `
+        <div class="travels-grid">${destinations.map(card).join('')}</div>
+      ` : `
+        <div class="travels-list">${destinations.map(listItem).join('')}</div>
+      `}
+    </article>`;
+  }
+
   function activeAlbum() {
     const albums = state.albums && state.albums.length ? state.albums : [defaultAlbum(state.updatedAt)];
     return albums.find((album) => album.id === ui.selectedAlbumId) || albums[0] || defaultAlbum(state.updatedAt);
@@ -4191,9 +4283,8 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
               ${renderNotesTasks()}
               ${renderPicks()}
             </div>
-            ${renderGrowth()}
           </section>` : ''}
-        ${activeSection === 'growth' ? `<section class="hk-section">${renderGrowth()}</section>` : ''}
+        ${activeSection === 'growth' ? `<section class="hk-section">${renderPersonalGrowth()}${renderGrowth()}</section>` : ''}
         ${activeSection === 'habits' ? `<section class="hk-section">${renderGrowth()}</section>` : ''}
         ${activeSection === 'travels' ? `<section class="hk-section">${renderTravels()}</section>` : ''}
         ${activeSection === 'gallery' ? `<section class="hk-section">${renderGallery()}</section>` : ''}
@@ -4408,6 +4499,53 @@ document.querySelectorAll('[data-note-delete]').forEach((button) => {
     // Only intercepts when clipboard contains file-type items (images, files).
     // Text pastes pass through to their target input/textarea normally.
     document.addEventListener('paste', handleGalleryPaste);
+
+    // Travels — view toggle, add, remove, copy
+    document.querySelectorAll('.travels-view-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        ui.travelsView = btn.dataset.view;
+        render();
+      });
+    });
+
+    byId('add-travel')?.addEventListener('click', () => {
+      const name = byId('travel-name')?.value.trim();
+      const lat = parseFloat(byId('travel-lat')?.value);
+      const lng = parseFloat(byId('travel-lng')?.value);
+      if (!name || isNaN(lat) || isNaN(lng)) return;
+      const newDest = {
+        id: Date.now(),
+        name,
+        country: byId('travel-country')?.value.trim() || 'Unknown',
+        lat,
+        lng,
+        notes: byId('travel-notes')?.value.trim() || '',
+        priority: byId('travel-priority')?.value || 'medium',
+      };
+      state.travels = [...(state.travels || []), newDest];
+      byId('travel-name').value = '';
+      byId('travel-country').value = '';
+      byId('travel-lat').value = '';
+      byId('travel-lng').value = '';
+      byId('travel-notes').value = '';
+      byId('travel-priority').value = 'medium';
+      saveAndRender();
+    });
+
+    document.querySelectorAll('.travel-copy').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const lat = parseFloat(btn.dataset.lat);
+        const lng = parseFloat(btn.dataset.lng);
+        navigator.clipboard.writeText(`${lat}, ${lng}`);
+      });
+    });
+
+    document.querySelectorAll('.travel-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.travels = (state.travels || []).filter((d) => d.id !== parseInt(btn.dataset.travelId));
+        saveAndRender();
+      });
+    });
 
     bindGrowthEvents();
   }

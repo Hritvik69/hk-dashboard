@@ -2119,6 +2119,102 @@ const ui = {
     </article>`;
   }
 
+  function renderTasks() {
+    const openTasks = state.tasks.filter((task) => !task.done);
+    const tasksHtml = state.tasks.length
+      ? state.tasks
+          .map((task) => `<div class="task-item ${task.done ? 'done' : ''}">
+            <button type="button" class="task-toggle" data-task="${escapeHtml(task.id)}">
+              <span class="icon">OK</span>
+              <span>${escapeHtml(task.text)}</span>
+              <small>${escapeHtml(task.priority || 'Normal')}</small>
+            </button>
+            <button type="button" class="remove-button" data-task-delete="${escapeHtml(task.id)}">Remove</button>
+          </div>`)
+          .join('')
+      : '<p class="empty">No todo</p>';
+    return `<article class="panel tasks-panel">
+      <header class="panel-header">
+        <div><p class="eyebrow">Todo</p><h2>${openTasks.length} open tasks</h2></div>
+        <div class="button-row"><button type="button" id="add-task">+ Task</button></div>
+      </header>
+      <div class="compose-row">
+        <input id="quick-text" placeholder="Add a task..." />
+        <select id="task-priority">
+          <option>Normal</option><option>High</option><option>Low</option>
+        </select>
+      </div>
+      <div class="scroll-box" style="max-height:420px;overflow-y:auto">${tasksHtml}</div>
+    </article>`;
+  }
+
+  function renderNotes() {
+    const notesHtml = state.notes.length
+      ? state.notes
+          .map((note) => {
+            const isEditing = ui.editingNoteId === note.id;
+            const codeBlocks = Array.isArray(note.codeBlocks) ? note.codeBlocks : [];
+            const noteActions = isEditing
+              ? `<div class="note-top-actions">
+                  <button type="button" class="remove-button" data-note-cancel="${escapeHtml(note.id)}">Cancel</button>
+                  <button type="button" class="save-button" data-note-save="${escapeHtml(note.id)}">Save</button>
+                </div>`
+              : `<div class="note-top-actions">
+                  <button type="button" class="copy-button" data-note-copy="${escapeHtml(note.id)}">Copy</button>
+                  <button type="button" class="edit-button" data-note-edit="${escapeHtml(note.id)}">Edit</button>
+                  <button type="button" class="remove-button" data-note-delete="${escapeHtml(note.id)}">Remove</button>
+                </div>`;
+            const titleField = isEditing
+              ? `<input class="note-title-input" data-note-title-input="${escapeHtml(note.id)}" value="${escapeHtml(note.title || '')}" placeholder="Title" />`
+              : `<strong>${escapeHtml(note.title || 'Untitled note')}</strong>`;
+            const bodyField = isEditing
+              ? `<textarea wrap="soft" data-note-body-input="${escapeHtml(note.id)}" placeholder="Write your note...">${escapeHtml(note.body || '')}</textarea>`
+              : `<p class="note-body">${escapeHtml(note.body || '')}</p>`;
+            const codeBlocksHtml = codeBlocks.length
+              ? codeBlocks
+                  .map((block, blockIndex) => {
+                    const blockId = `${escapeHtml(note.id)}-${blockIndex}`;
+                    const lang = String(block?.lang || 'text').trim() || 'text';
+                    const content = String(block?.content || '');
+                    if (isEditing) {
+                      return `<div class="note-code-block-editor" data-code-block="${blockId}">
+                        <div class="code-lang-row">
+                          <input data-note-code-lang="${blockId}" value="${escapeHtml(lang)}" placeholder="language" maxlength="24" />
+                          <button type="button" class="remove-button" data-note-code-remove="${blockId}">Remove</button>
+                        </div>
+                        <textarea wrap="soft" data-note-code-input="${blockId}" placeholder="Paste code...">${escapeHtml(content)}</textarea>
+                      </div>`;
+                    }
+                    return `<div class="note-code-block">
+                      <div class="note-code-block-header">
+                        <span class="lang-label">${escapeHtml(lang)}</span>
+                        <button type="button" class="copy-button" data-note-copy-code="${blockId}">Copy</button>
+                      </div>
+                      <pre data-note-code-content="${blockId}">${escapeHtml(content)}</pre>
+                    </div>`;
+                  })
+                  .join('')
+              : '';
+            const addCodeRow = isEditing
+              ? `<div class="note-code-add-row"><button type="button" class="add-code-button" data-note-code-add="${escapeHtml(note.id)}">+ Add code</button></div>`
+              : '';
+            return `<div class="note-card ${isEditing ? 'editing' : ''}">
+              <div class="card-title-row">${titleField}${noteActions}</div>
+              ${bodyField}${codeBlocksHtml}${addCodeRow}
+            </div>`;
+          })
+          .join('')
+      : '<p class="empty">No notes</p>';
+    return `<article class="panel notes-panel">
+      <header class="panel-header">
+        <div><p class="eyebrow">Notes</p><h2>${state.notes.length} notes</h2></div>
+        <div class="button-row"><button type="button" id="add-note">+ Note</button></div>
+      </header>
+      <textarea id="note-text" placeholder="Write a note..." rows="3"></textarea>
+      <div class="scroll-box" style="max-height:420px;overflow-y:auto">${notesHtml}</div>
+    </article>`;
+  }
+
   function renderPicks() {
     const picks = state.picks.filter((pick) => ui.pickFilter === 'All' || pick.source === ui.pickFilter);
     const scored = scoreAllStockPicks(picks);
@@ -4280,7 +4376,8 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
             </div>
             <div class="hk-home-grid">
               ${renderCalendar()}
-              ${renderNotesTasks()}
+              ${renderNotes()}
+              ${renderTasks()}
             </div>
           </section>` : ''}
         ${activeSection === 'growth' ? `<section class="hk-section">${renderPersonalGrowth()}${renderGrowth()}</section>` : ''}

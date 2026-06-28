@@ -298,18 +298,21 @@ button.active {
 
 /* ── Main content area ── */
 .hk-main {
-  padding: 28px 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
   max-width: 1200px;
 }
 
 .hk-section {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 20px;
   padding: 0 28px;
+}
+
+.hk-section-home {
+  padding: 28px 28px 0;
 }
 
 .hk-home-hero {
@@ -317,6 +320,7 @@ button.active {
   grid-template-columns: 1fr auto;
   gap: 20px;
   align-items: start;
+  margin-bottom: 20px;
 }
 
 .hk-home-greeting {
@@ -365,8 +369,26 @@ button.active {
 
 .hk-home-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.4fr);
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
   gap: 16px;
+}
+
+/* Calendar takes full top row */
+.hk-home-grid .calendar-panel {
+  grid-column: 1 / 3;
+  grid-row: 1 / 2;
+}
+
+/* Notes left, Tasks right on bottom row */
+.hk-home-grid .notes-panel {
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+}
+
+.hk-home-grid .tasks-panel {
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
 }
 
 .gate-shell {

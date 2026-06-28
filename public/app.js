@@ -47,6 +47,23 @@
   let syncText = 'Not synced yet';
   let notice = '';
   let state = mergeDashboard(readLocal());
+
+  // Sidebar navigation sections
+  const SIDEBAR_SECTIONS = [
+    { id: 'home',    name: 'Home',    icon: '◐', label: 'Today'            },
+    { id: 'growth',  name: 'Growth',  icon: '◈', label: 'Life dimensions'  },
+    { id: 'habits',  name: 'Habits',  icon: '◉', label: '30-day grid'      },
+    { id: 'travels', name: 'Travels', icon: '✈', label: 'Future destinations' },
+    { id: 'gallery', name: 'Gallery', icon: '▦', label: 'Files & albums'    },
+    { id: 'stocks',  name: 'Stocks',  icon: '▲', label: "Tomorrow's picks" },
+    { id: 'storage', name: 'Storage', icon: '◰', label: 'Browser usage'     },
+  ];
+
+  // Load persisted active section
+  const savedSection = localStorage.getItem('hk-active-section');
+  const validSection = SIDEBAR_SECTIONS.find(s => s.id === savedSection);
+  let activeSection = validSection ? validSection.id : 'home';
+
 const ui = {
     monthCursor: new Date(),
     selectedDate: todayKey(1),
@@ -4128,37 +4145,61 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     const openTasks = state.tasks.filter((task) => !task.done);
     const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
 
-    root.innerHTML = `<main class="app-shell">
-      <section class="hero-panel">
-        <div class="status-strip">
-          <div class="brand-mark"><img class="brand-logo" src="/hk-logo.svg" alt="HK logo" /></div>
-          <div><p class="eyebrow">Personal Workspace</p><h1>HK Dashboard</h1></div>
-          <div class="clock-card"><span>${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-        </div>
-        <div class="hero-grid">
-          <div class="welcome-card">
-            <p class="eyebrow">Today</p>
-            <h2>Good ${greeting}</h2>
-            <p>${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
-            <div class="mini-stats">
-              <span>${openTasks.length} open tasks</span>
-              <span>${state.notes.length} notes</span>
-              <span>${state.picks.length} picks</span>
-            </div>
+    root.innerHTML = `<main class="app-shell app-shell--sidebar">
+      <aside class="hk-sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-logo">HK</div>
+          <div class="sidebar-brand-text">
+            <div class="sidebar-brand-title">HK Dashboard</div>
+            <div class="sidebar-brand-sub">v3 · LIVE</div>
           </div>
-          <div class="quick-links">${renderQuickLinks()}</div>
         </div>
-      </section>
-      ${notice ? `<button class="notice" type="button" id="clear-notice">${escapeHtml(notice)}</button>` : ''}
-      <section class="dashboard-grid">
-        ${renderCalendar()}
-        ${renderNotesTasks()}
-        ${renderPicks()}
-        ${renderGrowth()}
-        ${renderGallery()}
-        ${renderPersonalGrowth()}
-        ${renderStoragePanel()}
-      </section>
+        <nav class="sidebar-nav">
+          ${SIDEBAR_SECTIONS.map(s => `
+            <button class="sidebar-nav-btn ${activeSection === s.id ? 'active' : ''}" data-section="${s.id}">
+              <span class="sidebar-nav-icon">${s.icon}</span>
+              <div class="sidebar-nav-text">
+                <div class="sidebar-nav-name">${s.name}</div>
+                <div class="sidebar-nav-label">${s.label}</div>
+              </div>
+            </button>
+          `).join('')}
+        </nav>
+        <div class="sidebar-footer">
+          All data persists locally via <span class="sidebar-accent">localStorage</span>
+        </div>
+      </aside>
+      <div class="hk-main">
+        ${notice ? `<button class="notice" type="button" id="clear-notice">${escapeHtml(notice)}</button>` : ''}
+        ${activeSection === 'home' ? `
+          <section class="hk-section hk-section-home">
+            <div class="hk-home-hero">
+              <div class="hk-home-greeting">
+                <p class="eyebrow">Today</p>
+                <h2>Good ${greeting}</h2>
+                <p class="hk-home-date">${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                <div class="mini-stats">
+                  <span>${openTasks.length} open tasks</span>
+                  <span>${state.notes.length} notes</span>
+                  <span>${state.picks.length} picks</span>
+                </div>
+              </div>
+              <div class="quick-links">${renderQuickLinks()}</div>
+            </div>
+            <div class="hk-home-grid">
+              ${renderCalendar()}
+              ${renderNotesTasks()}
+              ${renderPicks()}
+            </div>
+            ${renderGrowth()}
+          </section>` : ''}
+        ${activeSection === 'growth' ? `<section class="hk-section">${renderGrowth()}</section>` : ''}
+        ${activeSection === 'habits' ? `<section class="hk-section">${renderGrowth()}</section>` : ''}
+        ${activeSection === 'travels' ? `<section class="hk-section">${renderTravels()}</section>` : ''}
+        ${activeSection === 'gallery' ? `<section class="hk-section">${renderGallery()}</section>` : ''}
+        ${activeSection === 'stocks' ? `<section class="hk-section">${renderPicks()}</section>` : ''}
+        ${activeSection === 'storage' ? `<section class="hk-section">${renderStoragePanel()}</section>` : ''}
+      </div>
     </main>
     ${renderFileModal()}${renderAiPanel()}`;
 
@@ -4183,6 +4224,17 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
     byId('clear-notice')?.addEventListener('click', () => {
       notice = '';
       render();
+    });
+
+    // Sidebar navigation
+    document.querySelectorAll('.sidebar-nav-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const section = btn.dataset.section;
+        activeSection = section;
+        localStorage.setItem('hk-active-section', section);
+        render();
+        window.scrollTo(0, 0);
+      });
     });
 
     document.querySelectorAll('[data-month]').forEach((button) => {

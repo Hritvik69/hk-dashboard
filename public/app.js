@@ -4281,7 +4281,6 @@ const totalSize = visibleFiles.reduce((sum, file) => sum + (Number(file.size) ||
             <div class="hk-home-grid">
               ${renderCalendar()}
               ${renderNotesTasks()}
-              ${renderPicks()}
             </div>
           </section>` : ''}
         ${activeSection === 'growth' ? `<section class="hk-section">${renderPersonalGrowth()}${renderGrowth()}</section>` : ''}

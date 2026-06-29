@@ -10,13 +10,13 @@ function Travels() {
   const [view, setView] = useState('grid'); // grid | list
 
   const addDestination = () => {
-    if (!draft.name.trim() || !draft.lat || !draft.lng) return;
+    if (!draft.name.trim()) return;
     const newDest = {
       id: Date.now(),
       name: draft.name.trim(),
       country: draft.country.trim() || 'Unknown',
-      lat: parseFloat(draft.lat),
-      lng: parseFloat(draft.lng),
+      lat: draft.lat ? parseFloat(draft.lat) : 0,
+      lng: draft.lng ? parseFloat(draft.lng) : 0,
       notes: draft.notes.trim(),
       priority: draft.priority,
     };
@@ -104,7 +104,7 @@ function Travels() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>{d.name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{d.name}</div>
                   <div style={{ fontSize: 12, color: t.textDim, marginTop: 2 }}>{d.country}</div>
                 </div>
                 <span style={{
@@ -124,11 +124,11 @@ function Travels() {
               }}>
                 <div>
                   <div style={{ fontSize: 9.5, fontWeight: 700, color: t.textMute, letterSpacing: '0.15em', marginBottom: 3 }}>LATITUDE</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600 }}>{d.lat.toFixed(4)}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: d.lat ? t.text : t.textMute }}>{d.lat ? d.lat.toFixed(4) : '—'}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9.5, fontWeight: 700, color: t.textMute, letterSpacing: '0.15em', marginBottom: 3 }}>LONGITUDE</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600 }}>{d.lng.toFixed(4)}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: d.lng ? t.text : t.textMute }}>{d.lng ? d.lng.toFixed(4) : '—'}</div>
                 </div>
               </div>
 
@@ -181,11 +181,11 @@ function Travels() {
                 color: priorityColor(d.priority),
               }}>{d.priority.toUpperCase()}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{d.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{d.name}</div>
                 <div style={{ fontSize: 12, color: t.textDim }}>{d.country}</div>
               </div>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: t.textDim }}>
-                {d.lat.toFixed(4)}, {d.lng.toFixed(4)}
+                {d.lat ? d.lat.toFixed(4) : '—'}, {d.lng ? d.lng.toFixed(4) : '—'}
               </div>
               {d.notes && <div style={{ fontSize: 12, color: t.textMute, maxWidth: 200 }}>{d.notes}</div>}
               <div style={{ display: 'flex', gap: 6 }}>

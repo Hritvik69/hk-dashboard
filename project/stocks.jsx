@@ -47,10 +47,10 @@ function Stocks() {
       label="Tomorrow's Picks"
       title={`${picks.length} stocks · top ${top.sym} (${top.weighted}/100)`}
       action={
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {filters.map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
-              padding: '6px 12px',
+              padding: '6px 14px',
               fontSize: 12, fontWeight: 500,
               borderRadius: 8,
               whiteSpace: 'nowrap',
@@ -77,7 +77,7 @@ function Stocks() {
         <Btn variant="ghost" onClick={addStock}>Add</Btn>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
         {shown.map(p => {
           const vc = verdictColor(p.verdict);
           return (

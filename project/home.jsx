@@ -170,8 +170,9 @@ function Home() {
         </Panel>
       </div>
 
-      {/* Calendar + Notes/Todo */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 24 }}>
+      {/* Calendar + Tasks + Notes */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
+        {/* Calendar Panel */}
         <Panel
           label="Calendar"
           title={calData.monthName}
@@ -182,12 +183,12 @@ function Home() {
             </div>
           }
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 6 }}>
             {['S','M','T','W','T','F','S'].map((d, i) => (
-              <div key={i} style={{ textAlign: 'center', fontSize: 11, color: t.textMute, fontWeight: 500, letterSpacing: '0.1em', padding: '8px 0' }}>{d}</div>
+              <div key={i} style={{ textAlign: 'center', fontSize: 10, color: t.textMute, fontWeight: 500, letterSpacing: '0.1em', padding: '4px 0' }}>{d}</div>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
             {calData.cells.map((c, i) => {
               const today = isToday(c.day, c.muted);
               return (
@@ -195,11 +196,11 @@ function Home() {
                   aspectRatio: '1 / 1',
                   display: 'grid',
                   placeItems: 'center',
-                  fontSize: 14,
+                  fontSize: 11,
                   fontWeight: today ? 600 : 400,
                   color: c.muted ? t.textMute : (today ? '#08080c' : t.text),
                   background: today ? `linear-gradient(135deg, ${t.accent1}, ${t.accent2})` : 'transparent',
-                  borderRadius: 8,
+                  borderRadius: 6,
                   cursor: c.muted ? 'default' : 'pointer',
                   transition: 'background 0.12s',
                 }}
@@ -211,18 +212,13 @@ function Home() {
           </div>
         </Panel>
 
+        {/* Tasks Panel */}
         <Panel
-          label="Notes & Todo"
-          title={`${openNotes} notes, ${openTasks} todo`}
-          action={
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn size="sm" variant="ghost">Note</Btn>
-              <Btn size="sm" variant="ghost">Task</Btn>
-            </div>
-          }
+          label="Tasks"
+          title={`${openTasks} open tasks`}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 10, marginBottom: 10 }}>
-            <TextInput value={draftText} onChange={setDraftText} placeholder="Add a task or note..." onKeyDown={(e) => e.key === 'Enter' && addItem(e.shiftKey ? 'note' : 'task')} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, marginBottom: 8 }}>
+            <TextInput value={draftText} onChange={setDraftText} placeholder="Add a task..." onKeyDown={(e) => e.key === 'Enter' && addItem('task')} />
             <select
               value={draftPriority}
               onChange={(e) => setDraftPriority(e.target.value)}
@@ -241,81 +237,86 @@ function Home() {
               <option>Low</option>
             </select>
           </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <Btn size="sm" variant="accent" onClick={() => addItem('task')}>+ Add Task</Btn>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+            {tasks.map(task => (
+              <div key={task.id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 12px',
+                background: 'rgba(255,255,255,0.025)',
+                border: `1px solid ${t.border}`,
+                borderRadius: 9,
+              }}>
+                <button onClick={() => toggleTask(task.id)} style={{
+                  width: 22, height: 22, flexShrink: 0,
+                  borderRadius: 5,
+                  background: task.done ? t.success : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${task.done ? t.success : t.borderStrong}`,
+                  display: 'grid', placeItems: 'center',
+                  fontSize: 11, color: '#08080c', fontWeight: 700,
+                }}>{task.done ? 'OK' : ''}</button>
+                <span style={{ flex: 1, fontSize: 13, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? t.textMute : t.text }}>{task.text}</span>
+                <Pill bg={task.priority === 'High' ? hexToRgba(t.warn, 0.18) : 'rgba(255,255,255,0.06)'} color={task.priority === 'High' ? t.warn : t.textDim}>{task.priority}</Pill>
+                <button onClick={() => removeTask(task.id)} style={{
+                  fontSize: 10, padding: '4px 6px',
+                  background: hexToRgba(t.danger, 0.1),
+                  border: `1px solid ${hexToRgba(t.danger, 0.3)}`,
+                  borderRadius: 5,
+                  color: t.danger, fontWeight: 700, letterSpacing: '0.1em',
+                }}>×</button>
+              </div>
+            ))}
+            {tasks.length === 0 && <div style={{ fontSize: 12, color: t.textMute, textAlign: 'center', padding: 20 }}>No tasks yet</div>}
+          </div>
+        </Panel>
+
+        {/* Notes Panel */}
+        <Panel
+          label="Notes"
+          title={`${openNotes} notes`}
+        >
+          <div style={{ marginBottom: 8 }}>
+            <TextInput value={draftText} onChange={setDraftText} placeholder="Quick note..." onKeyDown={(e) => e.key === 'Enter' && addItem('note')} />
+          </div>
           <textarea
             value={draftLong}
             onChange={(e) => setDraftLong(e.target.value)}
-            placeholder="Write a longer note..."
+            placeholder="Write more details..."
             style={{
               background: 'rgba(0,0,0,0.25)',
               border: `1px solid ${t.border}`,
               borderRadius: 10,
-              padding: '11px 14px',
-              fontSize: 13.5,
+              padding: '10px 12px',
+              fontSize: 13,
               width: '100%',
               color: t.text,
-              minHeight: 76,
+              minHeight: 60,
               resize: 'vertical',
-              marginBottom: 14,
+              marginBottom: 10,
             }}
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
-            <Btn size="sm" variant="ghost" onClick={() => addItem('note')}>+ Note</Btn>
-            <Btn size="sm" variant="accent" onClick={() => addItem('task')}>+ Task</Btn>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <Btn size="sm" variant="ghost" onClick={() => addItem('note')}>+ Add Note</Btn>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 12, color: t.textDim, marginBottom: 8, fontWeight: 500 }}>Todo/tasks</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
-                {tasks.map(task => (
-                  <div key={task.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 12px',
-                    background: 'rgba(255,255,255,0.025)',
-                    border: `1px solid ${t.border}`,
-                    borderRadius: 9,
-                  }}>
-                    <button onClick={() => toggleTask(task.id)} style={{
-                      width: 22, height: 22, flexShrink: 0,
-                      borderRadius: 5,
-                      background: task.done ? t.success : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${task.done ? t.success : t.borderStrong}`,
-                      display: 'grid', placeItems: 'center',
-                      fontSize: 11, color: '#08080c', fontWeight: 700,
-                    }}>{task.done ? 'OK' : ''}</button>
-                    <span style={{ flex: 1, fontSize: 13, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? t.textMute : t.text }}>{task.text}</span>
-                    <Pill bg={task.priority === 'High' ? hexToRgba(t.warn, 0.18) : 'rgba(255,255,255,0.06)'} color={task.priority === 'High' ? t.warn : t.textDim}>{task.priority}</Pill>
-                    <button onClick={() => removeTask(task.id)} style={{
-                      fontSize: 10, padding: '4px 8px',
-                      background: hexToRgba(t.danger, 0.1),
-                      border: `1px solid ${hexToRgba(t.danger, 0.3)}`,
-                      borderRadius: 5,
-                      color: t.danger, fontWeight: 700, letterSpacing: '0.1em',
-                    }}>REMOVE</button>
-                  </div>
-                ))}
-                {tasks.length === 0 && <div style={{ fontSize: 12, color: t.textMute, textAlign: 'center', padding: 16 }}>No tasks</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {notes.map(note => (
+              <div key={note.id} style={{
+                display: 'flex', flexDirection: 'column', gap: 6,
+                padding: '10px 12px',
+                background: 'rgba(255,255,255,0.025)',
+                border: `1px solid ${t.border}`,
+                borderRadius: 9,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ flex: 1, fontSize: 13, color: t.text, fontFamily: note.text.startsWith('<') ? 'JetBrains Mono, monospace' : 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note.text}</span>
+                  <button onClick={() => removeNote(note.id)} style={{ fontSize: 10, padding: '4px 6px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 5, color: t.danger, fontWeight: 700 }}>×</button>
+                </div>
+                {note.long && <div style={{ fontSize: 11, color: t.textMute, lineHeight: 1.4 }}>{note.long}</div>}
+                <div style={{ fontSize: 10, color: t.textMute }}>{note.date}</div>
               </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: t.textDim, marginBottom: 8, fontWeight: 500 }}>Notes</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
-                {notes.map(note => (
-                  <div key={note.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '10px 12px',
-                    background: 'rgba(255,255,255,0.025)',
-                    border: `1px solid ${t.border}`,
-                    borderRadius: 9,
-                  }}>
-                    <span style={{ flex: 1, fontSize: 13, fontFamily: note.text.startsWith('<') ? 'JetBrains Mono, monospace' : 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note.text}</span>
-                    <button style={{ fontSize: 10, padding: '4px 8px', background: 'rgba(255,255,255,0.04)', borderRadius: 5, color: t.textDim, fontWeight: 700, letterSpacing: '0.1em' }}>COPY</button>
-                    <button style={{ fontSize: 10, padding: '4px 8px', background: hexToRgba(t.accent1, 0.1), border: `1px solid ${hexToRgba(t.accent1, 0.3)}`, borderRadius: 5, color: t.accent1, fontWeight: 700, letterSpacing: '0.1em' }}>EDIT</button>
-                    <button onClick={() => removeNote(note.id)} style={{ fontSize: 10, padding: '4px 8px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 5, color: t.danger, fontWeight: 700, letterSpacing: '0.1em' }}>REMOVE</button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
         </Panel>
       </div>

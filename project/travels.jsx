@@ -10,13 +10,13 @@ function Travels() {
   const [view, setView] = useState('grid'); // grid | list
 
   const addDestination = () => {
-    if (!draft.name.trim()) return;
+    if (!draft.name.trim() || !draft.lat || !draft.lng) return;
     const newDest = {
       id: Date.now(),
       name: draft.name.trim(),
       country: draft.country.trim() || 'Unknown',
-      lat: draft.lat ? parseFloat(draft.lat) : null,
-      lng: draft.lng ? parseFloat(draft.lng) : null,
+      lat: parseFloat(draft.lat),
+      lng: parseFloat(draft.lng),
       notes: draft.notes.trim(),
       priority: draft.priority,
     };
@@ -104,7 +104,7 @@ function Travels() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{d.name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{d.name}</div>
                   <div style={{ fontSize: 12, color: t.textDim, marginTop: 2 }}>{d.country}</div>
                 </div>
                 <span style={{
@@ -116,7 +116,6 @@ function Travels() {
                 }}>{d.priority.toUpperCase()}</span>
               </div>
 
-              {d.lat !== null && d.lng !== null && (
               <div style={{
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
                 padding: '10px 12px',
@@ -125,14 +124,13 @@ function Travels() {
               }}>
                 <div>
                   <div style={{ fontSize: 9.5, fontWeight: 700, color: t.textMute, letterSpacing: '0.15em', marginBottom: 3 }}>LATITUDE</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: t.text }}>{d.lat.toFixed(4)}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600 }}>{d.lat.toFixed(4)}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 9.5, fontWeight: 700, color: t.textMute, letterSpacing: '0.15em', marginBottom: 3 }}>LONGITUDE</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: t.text }}>{d.lng.toFixed(4)}</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600 }}>{d.lng.toFixed(4)}</div>
                 </div>
               </div>
-              )}
 
               {d.notes && (
                 <div style={{ fontSize: 12, color: t.textDim, lineHeight: 1.5 }}>
@@ -183,14 +181,12 @@ function Travels() {
                 color: priorityColor(d.priority),
               }}>{d.priority.toUpperCase()}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{d.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{d.name}</div>
                 <div style={{ fontSize: 12, color: t.textDim }}>{d.country}</div>
               </div>
-              {d.lat !== null && d.lng !== null && (
-              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: t.text }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: t.textDim }}>
                 {d.lat.toFixed(4)}, {d.lng.toFixed(4)}
               </div>
-              )}
               {d.notes && <div style={{ fontSize: 12, color: t.textMute, maxWidth: 200 }}>{d.notes}</div>}
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => copyCoords(d.lat, d.lng)} style={{ padding: '6px 10px', fontSize: 10, fontWeight: 700, background: hexToRgba(t.accent1, 0.1), border: `1px solid ${hexToRgba(t.accent1, 0.3)}`, borderRadius: 6, color: t.accent1, cursor: 'pointer' }}>COPY</button>

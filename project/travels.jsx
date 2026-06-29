@@ -104,8 +104,8 @@ function Travels() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: t.text }}>{d.name}</div>
-                  <div style={{ fontSize: 12, color: t.textDim, marginTop: 2 }}>{d.country}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#f0f0f5' }}>{d.name}</div>
+                  <div style={{ fontSize: 12, color: '#a1a1aa', marginTop: 2 }}>{d.country}</div>
                 </div>
                 <span style={{
                   fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
@@ -181,8 +181,8 @@ function Travels() {
                 color: priorityColor(d.priority),
               }}>{d.priority.toUpperCase()}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{d.name}</div>
-                <div style={{ fontSize: 12, color: t.textDim }}>{d.country}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#f0f0f5' }}>{d.name}</div>
+                <div style={{ fontSize: 12, color: '#a1a1aa' }}>{d.country}</div>
               </div>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: t.textDim }}>
                 {d.lat ? d.lat.toFixed(4) : '—'}, {d.lng ? d.lng.toFixed(4) : '—'}

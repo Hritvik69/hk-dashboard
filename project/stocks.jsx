@@ -88,9 +88,9 @@ function Stocks() {
               borderRadius: 12,
               display: 'flex', flexDirection: 'column', gap: 8,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.02em' }}>{p.sym}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: p.src === 'AI' ? t.accent2 : t.warn, letterSpacing: '0.1em' }}>{p.src}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.02em', color: '#f0f0f5' }}>{p.sym}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: p.src === 'AI' ? t.accent2 : t.warn, letterSpacing: '0.1em', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: 4 }}>{p.src}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: vc }} />
@@ -135,9 +135,9 @@ function Stocks() {
 function Row({ label, val, valColor, small }) {
   const t = useTheme();
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: small ? 11 : 12 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: small ? 10 : 11 }}>
       <span style={{ color: t.textDim, flexShrink: 0 }}>{label}</span>
-      <span className="mono" style={{ color: valColor || t.text, fontWeight: 500, textAlign: 'right', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</span>
+      <span className="mono" style={{ color: valColor || t.text, fontWeight: 500, textAlign: 'right', flexShrink: 0, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</span>
     </div>
   );
 }

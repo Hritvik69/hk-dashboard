@@ -77,28 +77,26 @@ function Stocks() {
         <Btn variant="ghost" onClick={addStock}>Add</Btn>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
         {shown.map(p => {
           const vc = verdictColor(p.verdict);
           return (
             <div key={p.sym} style={{
-              padding: 16,
+              padding: 14,
               background: 'rgba(0,0,0,0.25)',
               border: `1px solid ${t.border}`,
               borderRadius: 12,
-              display: 'flex', flexDirection: 'column', gap: 8,
+              display: 'flex', flexDirection: 'column', gap: 6,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.02em' }}>{p.sym}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.02em', color: t.text }}>{p.sym}</div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: p.src === 'AI' ? t.accent2 : t.warn, letterSpacing: '0.1em' }}>{p.src}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: vc }} />
-                <span style={{ color: vc }}>{p.verdict}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 7 }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, color: t.textMute, letterSpacing: '0.15em' }}>WEIGHTED</span>
-                <span className="mono" style={{
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: vc, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: vc }}>{p.verdict}</span>
+                <span style={{ flex: 1 }} />
+                <span style={{
                   fontSize: 11, fontWeight: 700,
                   padding: '2px 8px',
                   background: hexToRgba(t.accent2, 0.18),
@@ -106,23 +104,27 @@ function Stocks() {
                   borderRadius: 5,
                   color: t.accent2,
                 }}>{p.weighted}/100</span>
-                <span style={{ flex: 1 }} />
-                <button style={{ fontSize: 9.5, padding: '3px 7px', background: hexToRgba(t.accent1, 0.1), border: `1px solid ${hexToRgba(t.accent1, 0.25)}`, borderRadius: 4, color: t.accent1, fontWeight: 700, letterSpacing: '0.1em' }}>WHY?</button>
               </div>
-              <Row label="Price" val={p.price.toLocaleString('en-IN')} />
-              <Row label="Source score" val={`${p.srcScore}/100`} />
-              <Row label="Risk" val={p.risk} />
-              <Row label="Timing" val={p.timing} valColor={t.success} />
-              <Row label="Setup" val={p.setup} small />
-              <Row label="Volume" val={p.volume.toLocaleString('en-IN')} />
-              <Row label="RSI" val={p.rsi.toFixed(2)} />
-              <div style={{ fontSize: 11, color: t.textDim, lineHeight: 1.45, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 7 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: t.textMute, letterSpacing: '0.12em', marginBottom: 2 }}>PRICE</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{p.price.toLocaleString('en-IN')}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: t.textMute, letterSpacing: '0.12em', marginBottom: 2 }}>RSI</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{p.rsi.toFixed(1)}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: t.textMute, letterSpacing: '0.12em', marginBottom: 2 }}>RISK</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: p.risk > 3 ? t.danger : t.text }}>{p.risk}%</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: t.textDim, padding: '6px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.note}
               </div>
-              <div style={{ fontSize: 10.5, color: t.textMute, fontWeight: 600 }}>GS AI confidence below {p.conf}%</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
-                <button style={{ padding: '7px 8px', background: hexToRgba(t.accent1, 0.1), border: `1px solid ${hexToRgba(t.accent1, 0.3)}`, borderRadius: 6, color: t.accent1, fontWeight: 700, fontSize: 11, letterSpacing: '0.08em' }}>OPEN CHART</button>
-                <button onClick={() => removeStock(p.sym)} style={{ padding: '7px 8px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 6, color: t.danger, fontWeight: 700, fontSize: 11, letterSpacing: '0.08em' }}>REMOVE</button>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <button style={{ flex: 1, padding: '6px 8px', background: hexToRgba(t.accent1, 0.1), border: `1px solid ${hexToRgba(t.accent1, 0.3)}`, borderRadius: 6, color: t.accent1, fontWeight: 700, fontSize: 10, letterSpacing: '0.06em' }}>CHART</button>
+                <button onClick={() => removeStock(p.sym)} style={{ flex: 1, padding: '6px 8px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 6, color: t.danger, fontWeight: 700, fontSize: 10, letterSpacing: '0.06em' }}>REMOVE</button>
               </div>
             </div>
           );

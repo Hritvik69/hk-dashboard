@@ -1,20 +1,6 @@
 import { defineConfig } from 'vite';
-import { createHtmlPlugin } from 'vite-plugin-html';
 
 export default defineConfig({
-  plugins: [
-    createHtmlPlugin({
-      inject: {
-        tags: [
-          {
-            injectTo: 'body',
-            tag: 'script',
-            attrs: { src: '/app.js' },
-          },
-        ],
-      },
-    }),
-  ],
   build: {
     rollupOptions: {
       input: 'index.html',

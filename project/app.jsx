@@ -78,7 +78,7 @@ function App() {
         <aside style={{
           padding: '28px 18px',
           borderRight: `1px solid ${theme.border}`,
-          position: 'sticky', top: 0, height: '100vh',
+          position: 'sticky', top: 0, height: '100vh', overflowY: 'auto',
           background: `linear-gradient(180deg, ${theme.bgPanel} 0%, ${theme.bg} 100%)`,
           display: 'flex', flexDirection: 'column', gap: 4,
         }}>
@@ -98,7 +98,7 @@ function App() {
           {sections.map(s => (
             <button key={s.id} onClick={() => setActive(s.id)} style={{
               display: 'flex', alignItems: 'center', gap: 12,
-              padding: '11px 12px', borderRadius: 9,
+              padding: '11px 12px', borderRadius: 9, flexShrink: 0,
               background: active === s.id
                 ? `linear-gradient(90deg, ${hexToRgba(theme.accent2, 0.18)}, transparent)`
                 : 'transparent',
@@ -110,7 +110,7 @@ function App() {
             onMouseLeave={(e) => { if (active !== s.id) e.currentTarget.style.background = 'transparent'; }}
             >
               <span style={{
-                width: 28, height: 28, borderRadius: 7,
+                width: 28, height: 28, borderRadius: 7, flexShrink: 0,
                 background: active === s.id ? hexToRgba(theme.accent1, 0.2) : 'rgba(255,255,255,0.04)',
                 color: active === s.id ? theme.accent1 : theme.textDim,
                 display: 'grid', placeItems: 'center',
@@ -123,10 +123,10 @@ function App() {
             </button>
           ))}
 
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, flexShrink: 0 }} />
 
           <div style={{
-            padding: 14, borderRadius: 10,
+            padding: 14, borderRadius: 10, flexShrink: 0,
             background: 'rgba(255,255,255,0.02)',
             border: `1px solid ${theme.border}`,
             fontSize: 11, color: theme.textMute,

@@ -170,9 +170,8 @@ function Home() {
         </Panel>
       </div>
 
-      {/* Calendar + Tasks + Notes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
-        {/* Calendar Panel */}
+      {/* Calendar — full width, medium height */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
         <Panel
           label="Calendar"
           title={calData.monthName}
@@ -211,6 +210,10 @@ function Home() {
             })}
           </div>
         </Panel>
+      </div>
+
+      {/* Tasks — full width */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
 
         {/* Tasks Panel */}
         <Panel
@@ -271,53 +274,72 @@ function Home() {
             {tasks.length === 0 && <div style={{ fontSize: 12, color: t.textMute, textAlign: 'center', padding: 20 }}>No tasks yet</div>}
           </div>
         </Panel>
+      </div>
 
-        {/* Notes Panel */}
+      {/* Notes — full width, separate section */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
         <Panel
           label="Notes"
           title={`${openNotes} notes`}
         >
-          <div style={{ marginBottom: 10 }}>
-            <TextInput value={draftText} onChange={setDraftText} placeholder="Quick note title..." onKeyDown={(e) => e.key === 'Enter' && addItem('note')} />
+          {/* Form — organized in a row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: t.textMute, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>Title</div>
+              <TextInput value={draftText} onChange={setDraftText} placeholder="Quick note title..." onKeyDown={(e) => e.key === 'Enter' && addItem('note')} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: t.textMute, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>Details <span style={{ fontWeight: 400, textTransform: 'none', opacity: 0.6 }}>(optional)</span></div>
+              <textarea
+                value={draftLong}
+                onChange={(e) => setDraftLong(e.target.value)}
+                placeholder="Add more context..."
+                style={{
+                  background: 'rgba(0,0,0,0.25)',
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 10,
+                  padding: '11px 14px',
+                  fontSize: 13,
+                  width: '100%',
+                  color: t.text,
+                  minHeight: 44,
+                  resize: 'none',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <Btn size="md" variant="accent" onClick={() => addItem('note')}>+ Add Note</Btn>
+            </div>
           </div>
-          <div style={{ marginBottom: 10 }}>
-            <textarea
-              value={draftLong}
-              onChange={(e) => setDraftLong(e.target.value)}
-              placeholder="Add details (optional)..."
-              style={{
-                background: 'rgba(0,0,0,0.25)',
-                border: `1px solid ${t.border}`,
-                borderRadius: 10,
-                padding: '10px 12px',
-                fontSize: 12,
-                width: '100%',
-                color: t.text,
-                minHeight: 50,
-                resize: 'vertical',
-              }}
-            />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-            <Btn size="sm" variant="ghost" onClick={() => addItem('note')}>+ Add Note</Btn>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto' }}>
+          {/* Notes list — organized in a responsive grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
             {notes.map(note => (
               <div key={note.id} style={{
-                display: 'flex', flexDirection: 'column', gap: 4,
-                padding: '12px',
+                display: 'flex', flexDirection: 'column', gap: 6,
+                padding: '14px 16px',
                 background: 'rgba(255,255,255,0.025)',
                 border: `1px solid ${t.border}`,
-                borderRadius: 8,
+                borderRadius: 10,
               }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: t.text, fontFamily: note.text.startsWith('<') ? 'JetBrains Mono, monospace' : 'inherit', wordBreak: 'break-word' }}>{note.text}</span>
-                  <button onClick={() => removeNote(note.id)} style={{ fontSize: 10, padding: '3px 6px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 4, color: t.danger, fontWeight: 700 }}>×</button>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: t.text, fontFamily: note.text.startsWith('<') ? 'JetBrains Mono, monospace' : 'inherit', wordBreak: 'break-word', lineHeight: 1.4 }}>{note.text}</span>
+                  <button onClick={() => removeNote(note.id)} style={{ fontSize: 10, padding: '3px 7px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 4, color: t.danger, fontWeight: 700, flexShrink: 0 }}>×</button>
                 </div>
-                {note.long && <div style={{ fontSize: 11, color: t.textDim, lineHeight: 1.5 }}>{note.long}</div>}
+                {note.long && (
+                  <div style={{
+                    fontSize: 12, color: t.textDim, lineHeight: 1.55,
+                    padding: '8px 10px',
+                    background: 'rgba(0,0,0,0.15)',
+                    borderRadius: 7,
+                    borderLeft: `3px solid ${hexToRgba(t.accent1, 0.5)}`,
+                  }}>{note.long}</div>
+                )}
                 <div style={{ fontSize: 10, color: t.textMute, marginTop: 2 }}>{note.date}</div>
               </div>
             ))}
+            {notes.length === 0 && <div style={{ gridColumn: '1 / -1', fontSize: 12, color: t.textMute, textAlign: 'center', padding: 30 }}>No notes yet</div>}
           </div>
         </Panel>
       </div>

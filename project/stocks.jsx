@@ -40,20 +40,19 @@ function Stocks() {
 
   const removeStock = (sym) => setPicks(picks.filter(p => p.sym !== sym));
 
-  const verdictColor = (v) => v === 'Buy' ? t.success : v === 'Hold' ? t.accent1 : v === 'Watch' ? t.warn : t.danger;
+  const verdictColor = (v) => v === 'Buy' ? t.success : v === 'Hold' ? t.accent1 : v === 'Watch' ? t.warn : t.danger; // Avoid falls to danger
 
   return (
     <Panel
       label="Tomorrow's Picks"
       title={`${picks.length} stocks · top ${top.sym} (${top.weighted}/100)`}
       action={
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {filters.map(f => (
             <button key={f} onClick={() => setFilter(f)} style={{
-              padding: '6px 14px',
-              fontSize: 12, fontWeight: 500,
-              borderRadius: 8,
-              whiteSpace: 'nowrap',
+              padding: '5px 12px',
+              fontSize: 11.5, fontWeight: 500,
+              borderRadius: 7,
               background: filter === f ? hexToRgba(t.accent2, 0.2) : 'rgba(255,255,255,0.04)',
               border: filter === f ? `1px solid ${t.accent2}` : `1px solid ${t.border}`,
               color: filter === f ? t.accent2 : t.textDim,
@@ -62,7 +61,7 @@ function Stocks() {
         </div>
       }
     >
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 1fr 1fr 1fr 90px', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 1fr 1fr 1fr 80px', gap: 8, marginBottom: 20 }}>
         <TextInput value={draft.sym} onChange={(v) => setDraft({...draft, sym: v})} placeholder="Symbol" />
         <select
           value={draft.src}
@@ -74,10 +73,10 @@ function Stocks() {
         <TextInput value={draft.verdict} onChange={(v) => setDraft({...draft, verdict: v})} placeholder="Watch" />
         <TextInput value={draft.entry} onChange={(v) => setDraft({...draft, entry: v})} placeholder="Entry" />
         <TextInput value={draft.target} onChange={(v) => setDraft({...draft, target: v})} placeholder="Target" />
-        <Btn variant="ghost" onClick={addStock}>Add</Btn>
+        <Btn variant="primary" onClick={addStock}>+ Add</Btn>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14, overflow: 'hidden' }}>
         {shown.map(p => {
           const vc = verdictColor(p.verdict);
           return (
@@ -116,10 +115,10 @@ function Stocks() {
               <Row label="Setup" val={p.setup} small />
               <Row label="Volume" val={p.volume.toLocaleString('en-IN')} />
               <Row label="RSI" val={p.rsi.toFixed(2)} />
-              <div style={{ fontSize: 11, color: t.textDim, lineHeight: 1.45, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              <div style={{ fontSize: 11, color: t.textDim, lineHeight: 1.5, marginTop: 4, wordBreak: 'break-word', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                 {p.note}
               </div>
-              <div style={{ fontSize: 10.5, color: t.textMute, fontWeight: 600 }}>GS AI confidence below {p.conf}%</div>
+              <div style={{ fontSize: 10, color: t.textMute, fontWeight: 600 }}>GS AI confidence below {p.conf}%</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
                 <button style={{ padding: '7px 8px', background: hexToRgba(t.accent1, 0.1), border: `1px solid ${hexToRgba(t.accent1, 0.3)}`, borderRadius: 6, color: t.accent1, fontWeight: 700, fontSize: 11, letterSpacing: '0.08em' }}>OPEN CHART</button>
                 <button onClick={() => removeStock(p.sym)} style={{ padding: '7px 8px', background: hexToRgba(t.danger, 0.1), border: `1px solid ${hexToRgba(t.danger, 0.3)}`, borderRadius: 6, color: t.danger, fontWeight: 700, fontSize: 11, letterSpacing: '0.08em' }}>REMOVE</button>
@@ -136,8 +135,8 @@ function Row({ label, val, valColor, small }) {
   const t = useTheme();
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: small ? 10 : 11 }}>
-      <span style={{ color: t.textDim, flexShrink: 0 }}>{label}</span>
-      <span className="mono" style={{ color: valColor || t.text, fontWeight: 500, textAlign: 'right', flexShrink: 0, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val}</span>
+      <span style={{ color: t.textDim, flexShrink: 0, flexBasis: 'auto' }}>{label}</span>
+      <span className="mono" style={{ color: valColor || t.text, fontWeight: 500, textAlign: 'right', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8 }}>{val}</span>
     </div>
   );
 }

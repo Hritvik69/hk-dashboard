@@ -9,21 +9,25 @@ function App() {
   const [unlocked, setUnlocked] = useState(false);
   const config = window.HK_CONFIG || {};
   const accessKey = config.DASHBOARD_ACCESS_KEY;
+  const hasAccessKey = accessKey != null && accessKey !== '';
   const siteUrl = config.SITE_URL;
 
-  // Skip landing if no access key configured or already unlocked
+  // Skip landing if already unlocked (sessionStorage check for when access key IS configured)
   useEffect(() => {
-    if (!accessKey) {
-      setUnlocked(true);
-    } else {
+    if (hasAccessKey) {
       const saved = sessionStorage.getItem('hk_access_key');
       if (saved === accessKey) {
         setUnlocked(true);
       }
     }
-  }, [accessKey]);
+  }, [accessKey, hasAccessKey]);
 
-  const handleUnlock = () => setUnlocked(true);
+  const handleUnlock = () => {
+    if (!hasAccessKey) {
+      // No password set — just unlock
+      setUnlocked(true);
+    }
+  };
 
   // Show landing page if not unlocked
   if (!unlocked) {

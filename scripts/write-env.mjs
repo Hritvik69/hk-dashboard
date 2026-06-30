@@ -59,7 +59,10 @@ const config = {
       read('VERCEL_PROJECT_PRODUCTION_URL') ||
       read('VERCEL_URL')
   ),
-  DASHBOARD_ACCESS_KEY: read('VITE_DASHBOARD_ACCESS_KEY') || read('DASHBOARD_ACCESS_KEY') || ''
+  // Only include DASHBOARD_ACCESS_KEY if it's actually set (empty string = skip landing page)
+  ...(read('VITE_DASHBOARD_ACCESS_KEY') || read('DASHBOARD_ACCESS_KEY')
+    ? { DASHBOARD_ACCESS_KEY: read('VITE_DASHBOARD_ACCESS_KEY') || read('DASHBOARD_ACCESS_KEY') }
+    : {}),
 };
 
 fs.mkdirSync(publicDir, { recursive: true });

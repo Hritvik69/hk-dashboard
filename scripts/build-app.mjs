@@ -41,28 +41,30 @@ for (const file of vendorFiles) {
   vendorCode.push(fs.readFileSync(outBase, 'utf8'));
   fs.unlinkSync(outBase);
 }
-fs.rmSync(tmpDir, { recursive: true });
 
 // Combine all vendor code then app.jsx entry
 const appCode = fs.readFileSync(path.join(projectDir, 'app.jsx'), 'utf8');
 const combined = vendorCode.join('\n') + '\n' + appCode;
 
+// Write combined code to a temp entry file (stdin+sourcefile trips newer esbuild)
+const tmpEntry = path.join(tmpDir, 'app.jsx');
+fs.writeFileSync(tmpEntry, combined);
+
 // Final minified production bundle
 await esbuild.build({
-  entryPoints: ['-'],
-  stdin: {
-    contents: combined,
-    sourcefile: 'app.jsx',
-    resolveDir: projectDir,
-  },
+  entryPoints: [tmpEntry],
   bundle: true,
   minify: true,
-  outfile,
+  outdir: path.join(rootDir, 'public'),
+  outbase: tmpDir,
   format: 'iife',
   jsx: 'automatic',
   jsxImportSource: 'react',
   logLevel: 'info',
 });
+
+fs.unlinkSync(tmpEntry);
+fs.rmSync(tmpDir, { recursive: true });
 
 const sizeKB = (fs.statSync(outfile).size / 1024).toFixed(1);
 console.log(`✓ Built → public/app.js (${sizeKB}KB)`);

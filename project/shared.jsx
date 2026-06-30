@@ -283,8 +283,171 @@ function hexToRgba(hex, a = 1) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// ------ Landing Page (Cloud Sync Password Gate) ------
+function LandingPage({ onUnlock, siteUrl, accessKey }) {
+  const t = useTheme();
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!password.trim()) {
+      setError('Please enter the access key');
+      return;
+    }
+
+    // If no access key configured, just unlock
+    if (!accessKey) {
+      onUnlock();
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    // Validate against server if access key is configured
+    try {
+      const res = await fetch(`${siteUrl}/api/state`, {
+        headers: { 'X-Access-Key': password }
+      });
+      if (res.ok || password === accessKey) {
+        sessionStorage.setItem('hk_access_key', password);
+        onUnlock();
+      } else {
+        setError('Invalid access key');
+      }
+    } catch {
+      // Fallback: check against env key
+      if (password === accessKey) {
+        sessionStorage.setItem('hk_access_key', password);
+        onUnlock();
+      } else {
+        setError('Invalid access key');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: `linear-gradient(135deg, ${t.bg} 0%, ${t.bgPanel} 100%)`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 420,
+        background: t.bgPanel,
+        border: `1px solid ${t.border}`,
+        borderRadius: 20,
+        padding: 40,
+        textAlign: 'center',
+        boxShadow: `0 25px 60px rgba(0,0,0,0.4)`,
+      }}>
+        {/* Logo */}
+        <div style={{
+          width: 72, height: 72, borderRadius: 18,
+          background: `linear-gradient(135deg, ${t.accent1}, ${t.accent2})`,
+          display: 'grid', placeItems: 'center',
+          fontWeight: 700, fontSize: 28, color: '#08080c',
+          margin: '0 auto 24px',
+          boxShadow: `0 12px 32px ${hexToRgba(t.accent2, 0.35)}`,
+        }}>HK</div>
+
+        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>HK Dashboard</h1>
+        <p style={{ fontSize: 13, color: t.textDim, marginBottom: 28 }}>
+          {accessKey ? 'Enter your access key to continue' : 'Click below to access your dashboard'}
+        </p>
+
+        {accessKey ? (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter access key..."
+              autoFocus
+              style={{
+                background: 'rgba(0,0,0,0.3)',
+                border: `1px solid ${error ? t.danger : t.border}`,
+                borderRadius: 12,
+                padding: '14px 16px',
+                fontSize: 15,
+                color: t.text,
+                textAlign: 'center',
+                letterSpacing: '0.1em',
+                outline: 'none',
+              }}
+              onFocus={(e) => e.target.style.borderColor = t.accent1}
+              onBlur={(e) => e.target.style.borderColor = error ? t.danger : t.border}
+            />
+            {error && (
+              <div style={{ fontSize: 12, color: t.danger }}>{error}</div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                background: `linear-gradient(135deg, ${t.accent1}, ${t.accent2})`,
+                border: 'none',
+                borderRadius: 12,
+                padding: '14px 24px',
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#08080c',
+                cursor: loading ? 'wait' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.15s',
+              }}
+            >
+              {loading ? 'Verifying...' : 'Unlock Dashboard'}
+            </button>
+          </form>
+        ) : (
+          <button
+            onClick={onUnlock}
+            style={{
+              background: `linear-gradient(135deg, ${t.accent1}, ${t.accent2})`,
+              border: 'none',
+              borderRadius: 12,
+              padding: '14px 24px',
+              fontSize: 14,
+              fontWeight: 600,
+              color: '#08080c',
+              cursor: 'pointer',
+              width: '100%',
+              transition: 'all 0.15s',
+            }}
+          >
+            Enter Dashboard
+          </button>
+        )}
+
+        <div style={{
+          marginTop: 28,
+          padding: '14px 16px',
+          background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${t.border}`,
+          borderRadius: 10,
+          fontSize: 11.5,
+          color: t.textMute,
+          lineHeight: 1.6,
+        }}>
+          Your data is stored locally and optionally synced to the cloud.
+          {accessKey && ' Enter your access key to sync across devices.'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Export to window
 Object.assign(window, {
   THEME_PRESETS, useLocalStorage, ThemeCtx, useTheme,
-  Panel, Btn, TextInput, SectionLabel, Pill, ProgressBar, Gradient, hexToRgba,
+  Panel, Btn, TextInput, SectionLabel, Pill, ProgressBar, Gradient, hexToRgba, LandingPage,
 });

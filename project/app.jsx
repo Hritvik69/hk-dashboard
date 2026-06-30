@@ -5,6 +5,39 @@ function App() {
     preset: 'original', owner: 'HK', density: 'comfy', accentOverride: 'default',
   });
 
+  // Cloud sync / access key check
+  const [unlocked, setUnlocked] = useState(false);
+  const config = window.HK_CONFIG || {};
+  const accessKey = config.DASHBOARD_ACCESS_KEY;
+  const siteUrl = config.SITE_URL;
+
+  // Skip landing if no access key configured or already unlocked
+  useEffect(() => {
+    if (!accessKey) {
+      setUnlocked(true);
+    } else {
+      const saved = sessionStorage.getItem('hk_access_key');
+      if (saved === accessKey) {
+        setUnlocked(true);
+      }
+    }
+  }, [accessKey]);
+
+  const handleUnlock = () => setUnlocked(true);
+
+  // Show landing page if not unlocked
+  if (!unlocked) {
+    return (
+      <ThemeCtx.Provider value={THEME_PRESETS.original}>
+        <LandingPage
+          onUnlock={handleUnlock}
+          siteUrl={siteUrl}
+          accessKey={accessKey}
+        />
+      </ThemeCtx.Provider>
+    );
+  }
+
   const theme = useMemo(() => {
     const base = { ...(THEME_PRESETS[t.preset] || THEME_PRESETS.original) };
     if (t.accentOverride === 'cyan') { base.accent1 = '#22d3ee'; base.accent2 = '#22d3ee'; }

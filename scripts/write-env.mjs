@@ -58,7 +58,8 @@ const config = {
       read('SITE_URL') ||
       read('VERCEL_PROJECT_PRODUCTION_URL') ||
       read('VERCEL_URL')
-  )
+  ),
+  DASHBOARD_ACCESS_KEY: read('VITE_DASHBOARD_ACCESS_KEY') || read('DASHBOARD_ACCESS_KEY') || ''
 };
 
 fs.mkdirSync(publicDir, { recursive: true });

@@ -3031,3 +3031,296 @@ h3 {
   color: #4fd1c5;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — HK Dashboard React App
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tablet: collapse sidebar to icons only ── */
+@media (max-width: 900px) {
+  [data-screen-label] {
+    display: grid !important;
+    grid-template-columns: 64px 1fr !important;
+  }
+
+  /* Collapse sidebar nav text */
+  [data-screen-label] aside > div > div:last-child,
+  [data-screen-label] aside > div > div:first-child > div:last-child,
+  [data-screen-label] aside > div > div:first-child > div:first-child + div {
+    display: none;
+  }
+
+  [data-screen-label] aside > div > div:first-child > div:first-child {
+    justify-content: center;
+  }
+
+  [data-screen-label] aside button {
+    justify-content: center;
+    padding: 11px 0;
+  }
+
+  [data-screen-label] aside > div > div:first-child {
+    padding: 6px 0 22px;
+  }
+
+  [data-screen-label] aside > div > div:nth-last-child(2) {
+    display: none !important;
+  }
+
+  [data-screen-label] aside {
+    padding: 28px 8px;
+  }
+
+  [data-screen-label] main {
+    padding: 20px 16px;
+  }
+}
+
+/* ── Mobile: sidebar becomes bottom tab bar ── */
+@media (max-width: 640px) {
+  [data-screen-label] {
+    display: flex !important;
+    flex-direction: column-reverse !important;
+    min-height: 100dvh;
+  }
+
+  /* Sidebar → bottom nav */
+  [data-screen-label] > aside:first-child {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    height: auto !important;
+    width: 100% !important;
+    flex-direction: row !important;
+    padding: 8px 12px !important;
+    border-right: none !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    background: linear-gradient(0deg, #0f1424 0%, #0a0e1a 100%) !important;
+    z-index: 100 !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    gap: 4px !important;
+    backdrop-filter: blur(16px) !important;
+  }
+
+  [data-screen-label] > aside > div {
+    flex-direction: row !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Hide brand & footer on mobile nav */
+  [data-screen-label] > aside > div > div:first-child,
+  [data-screen-label] > aside > div > div:last-child {
+    display: none !important;
+  }
+
+  /* Nav buttons → icon-only pills */
+  [data-screen-label] > aside button {
+    flex-direction: column !important;
+    gap: 2px !important;
+    padding: 8px 6px !important;
+    border-radius: 10px !important;
+    min-width: 56px !important;
+    flex: 1 !important;
+    text-align: center !important;
+  }
+
+  [data-screen-label] > aside button > span {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 12px !important;
+  }
+
+  [data-screen-label] > aside button > div {
+    display: none !important;
+  }
+
+  [data-screen-label] > aside button > div:first-child {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    flex: 1 !important;
+  }
+
+  /* Main content takes remaining height */
+  [data-screen-label] > main {
+    padding: 16px !important;
+    padding-bottom: 80px !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    gap: 16px !important;
+  }
+
+  /* AI FAB reposition */
+  [data-screen-label] > button[title="AI Assistant"] {
+    bottom: 80px !important;
+    right: 16px !important;
+  }
+}
+
+/* ── Home: greeting + quick links → stacked ── */
+@media (max-width: 768px) {
+  [data-screen-label] > main > div:first-child {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  [data-screen-label] > main > div:first-child > div {
+    max-width: 100% !important;
+  }
+
+  /* Greeting size */
+  [data-screen-label] h2 {
+    font-size: 28px !important;
+  }
+
+  /* Quick links 3-col → 2-col → 1-col */
+  [data-screen-label] > main > div:first-child > div:last-child [style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  [data-screen-label] > main > div:first-child > div:last-child [style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Calendar ── */
+@media (max-width: 480px) {
+  [data-screen-label] > main > div[style*="gridTemplateColumns: '1fr'"] [style*="grid-template-columns: repeat(7"] {
+    grid-template-columns: repeat(7, 1fr) !important;
+    gap: 2px !important;
+  }
+}
+
+/* ── Tasks form ── */
+@media (max-width: 600px) {
+  [data-screen-label] > main > div[style*="gridTemplateColumns: '1fr'"] > div[style*="gridTemplateColumns: '1fr 110px'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  [data-screen-label] > main > div[style*="gridTemplateColumns: '1fr'"] > div[style*="gridTemplateColumns: '1fr 110px'"] > div:last-child {
+    display: flex !important;
+    justify-content: flex-end !important;
+  }
+}
+
+/* ── Notes form: 3-col → 1-col ── */
+@media (max-width: 768px) {
+  [data-screen-label] > main > div[style*="gridTemplateColumns: '1fr'"] > div[style*="grid: 1fr 1fr auto"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Growth: radar + cards → stacked ── */
+@media (max-width: 900px) {
+  /* Top panel: radar left, stats right → stacked */
+  [data-screen-label] > main > div > section > div[style*="gridTemplateColumns: '1fr 1fr'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  [data-screen-label] > main > div > section > div[style*="gridTemplateColumns: '1fr 1fr'"] > div:last-child {
+    order: -1 !important;
+  }
+
+  /* Dimension cards: auto-fill → 1 per row on mobile */
+  [data-screen-label] > main > div[style*="gridTemplateColumns: 'repeat(auto-fill"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Habits: day header + habit rows scrollable ── */
+@media (max-width: 768px) {
+  /* Habit header row */
+  [data-screen-label] > main > div > section > div[style*="gridTemplateColumns: '180px 80px 90px 1fr'"] {
+    display: none !important; /* hide on small screens — just show the grid */
+  }
+
+  /* Each habit row: hide label/col, show scrollable day grid */
+  [data-screen-label] > main > div > section > div[style*="180px 80px 90px 1fr"] {
+    grid-template-columns: 1fr !important;
+    overflow-x: auto !important;
+    padding-bottom: 8px !important;
+  }
+
+  /* Notes form textarea */
+  [data-screen-label] textarea {
+    min-height: 100px !important;
+  }
+}
+
+/* ── Travels: form grid ── */
+@media (max-width: 900px) {
+  /* Add destination form: 4-col → 2-col */
+  .travels-form-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .travels-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Destination cards: grid → 1 col */
+  .travels-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Gallery ── */
+@media (max-width: 768px) {
+  [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  [style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── General: section gaps compress ── */
+@media (max-width: 640px) {
+  [data-screen-label] > main > div[style*="display: flex"] {
+    gap: 16px !important;
+  }
+
+  /* Panels compress padding */
+  section[style*="padding"] {
+    padding: 16px !important;
+  }
+
+  /* Header inside panels */
+  section[style*="padding"] header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  section[style*="padding"] header h2 {
+    font-size: 18px !important;
+  }
+
+  /* AI panel on mobile */
+  [title="How can I help?"] {
+    right: 8px !important;
+    left: 8px !important;
+    width: auto !important;
+    bottom: 90px !important;
+  }
+}
+
+/* ── Text sizing on small screens ── */
+@media (max-width: 480px) {
+  h1 { font-size: 20px !important; }
+  h2 { font-size: 18px !important; }
+  [data-screen-label] > main > div:first-child h2 { font-size: 24px !important; }
+}
+

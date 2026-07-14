@@ -10,7 +10,7 @@
     "predev": "node scripts/write-env.mjs",
     "dev": "vite --host 0.0.0.0",
     "prebuild": "node scripts/write-env.mjs",
-    "build": "vite build",
+    "build": "node scripts/build-app.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "prepreview": "node scripts/write-env.mjs",
     "preview": "vite preview --host 0.0.0.0",

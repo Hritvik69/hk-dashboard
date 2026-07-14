@@ -302,8 +302,8 @@ function Home() {
                   fontSize: 13,
                   width: '100%',
                   color: t.text,
-                  minHeight: 44,
-                  resize: 'none',
+                  minHeight: 80,
+                  resize: 'vertical',
                   fontFamily: 'inherit',
                   boxSizing: 'border-box',
                 }}

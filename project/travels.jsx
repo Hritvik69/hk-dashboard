@@ -66,13 +66,13 @@ function Travels() {
       }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: t.textDim, marginBottom: 14, letterSpacing: '0.08em' }}>ADD DESTINATION</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <TextInput value={draft.name} onChange={(v) => setDraft({...draft, name: v})} placeholder="City / Place" />
-          <TextInput value={draft.country} onChange={(v) => setDraft({...draft, country: v})} placeholder="Country" />
-          <TextInput value={draft.lat} onChange={(v) => setDraft({...draft, lat: v})} placeholder="Latitude" mono style={{ fontFamily: 'JetBrains Mono, monospace' }} />
-          <TextInput value={draft.lng} onChange={(v) => setDraft({...draft, lng: v})} placeholder="Longitude" mono style={{ fontFamily: 'JetBrains Mono, monospace' }} />
+          <TextInput value={draft.name} onChange={(v) => setDraft({...draft, name: v})} placeholder="City / Place" onKeyDown={(e) => e.key === 'Enter' && addDestination()} />
+          <TextInput value={draft.country} onChange={(v) => setDraft({...draft, country: v})} placeholder="Country" onKeyDown={(e) => e.key === 'Enter' && addDestination()} />
+          <TextInput value={draft.lat} onChange={(v) => setDraft({...draft, lat: v})} placeholder="Latitude" mono style={{ fontFamily: 'JetBrains Mono, monospace' }} onKeyDown={(e) => e.key === 'Enter' && addDestination()} />
+          <TextInput value={draft.lng} onChange={(v) => setDraft({...draft, lng: v})} placeholder="Longitude" mono style={{ fontFamily: 'JetBrains Mono, monospace' }} onKeyDown={(e) => e.key === 'Enter' && addDestination()} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10 }}>
-          <TextInput value={draft.notes} onChange={(v) => setDraft({...draft, notes: v})} placeholder="Notes / plans" />
+          <TextInput value={draft.notes} onChange={(v) => setDraft({...draft, notes: v})} placeholder="Notes / plans" onKeyDown={(e) => e.key === 'Enter' && addDestination()} />
           <select
             value={draft.priority}
             onChange={(e) => setDraft({...draft, priority: e.target.value})}
@@ -82,7 +82,7 @@ function Travels() {
             <option value="medium" style={{ color: t.text }}>Medium</option>
             <option value="low" style={{ color: t.text }}>Low</option>
           </select>
-          <Btn variant="primary" onClick={addDestination}>Add Destination</Btn>
+          <Btn variant="primary" onClick={addDestination} style={{ color: '#ffffff' }}>Add Destination</Btn>
         </div>
       </div>
 

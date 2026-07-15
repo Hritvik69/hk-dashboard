@@ -70,3 +70,11 @@ fs.writeFileSync(
   path.join(publicDir, 'env.js'),
   `window.HK_CONFIG = ${JSON.stringify(config, null, 2)};\n`
 );
+
+// Also write to dist/ so it's present after the vite build step (public/env.js is gitignored)
+const distDir = path.join(root, 'dist');
+fs.mkdirSync(distDir, { recursive: true });
+fs.writeFileSync(
+  path.join(distDir, 'env.js'),
+  `window.HK_CONFIG = ${JSON.stringify(config, null, 2)};\n`
+);

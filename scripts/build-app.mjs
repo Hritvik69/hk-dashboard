@@ -66,13 +66,5 @@ await esbuild.build({
 fs.unlinkSync(tmpEntry);
 fs.rmSync(tmpDir, { recursive: true });
 
-// Copy env.js to dist/ so it's present after the vite build step
-const envSrc = path.join(rootDir, 'public', 'env.js');
-const envDst = path.join(rootDir, 'dist', 'env.js');
-if (fs.existsSync(envSrc)) {
-  fs.copyFileSync(envSrc, envDst);
-  console.log('✓ env.js → dist/');
-}
-
 const sizeKB = (fs.statSync(outfile).size / 1024).toFixed(1);
 console.log(`✓ Built → public/app.js (${sizeKB}KB)`);
